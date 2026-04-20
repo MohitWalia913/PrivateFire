@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { signIn } from 'next-auth/react'
 import { Flame, Eye, EyeOff, Mail, Lock, Shield } from 'lucide-react'
+import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -17,17 +17,20 @@ export default function LoginPage() {
     e.preventDefault()
     setError('')
     setLoading(true)
-    const result = await signIn('credentials', {
+
+    const supabase = getSupabaseBrowserClient()
+    const { error: signInError } = await supabase.auth.signInWithPassword({
       email: form.email,
       password: form.password,
-      redirect: false,
     })
-    setLoading(false)
-    if (result?.error) {
-      setError('Invalid email or password. Please try again.')
+
+    if (signInError) {
+      setError(signInError.message || 'Invalid email or password. Please try again.')
     } else {
       router.push('/dashboard')
     }
+
+    setLoading(false)
   }
 
   return (
@@ -102,7 +105,7 @@ export default function LoginPage() {
           <div className="flex flex-col gap-3">
             {/* Google button — official style */}
             <button
-              onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
+              onClick={() => setError('Google sign-in is not wired to Supabase yet.')}
               className="flex items-center justify-center gap-3 bg-white hover:bg-gray-50 text-gray-700 font-medium border border-gray-200 py-3 rounded-xl text-sm transition-all w-full shadow-sm"
             >
               <svg width="18" height="18" viewBox="0 0 24 24">
@@ -115,7 +118,7 @@ export default function LoginPage() {
             </button>
             {/* Apple button — uses demo credentials until Apple OAuth dev account is set up */}
             <button
-              onClick={() => { signIn('credentials', { email: 'demo@privatefireapp.com', password: 'demo1234', callbackUrl: '/dashboard' }) }}
+              onClick={() => setError('Apple sign-in is not wired to Supabase yet.')}
               className="flex items-center justify-center gap-3 bg-gray-900 hover:bg-gray-800 text-white border border-gray-700 py-3 rounded-xl text-sm transition-all w-full font-medium"
             >
               <svg viewBox="0 0 24 24" fill="white" width="18" height="18"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.3.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>

@@ -2,10 +2,12 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { signIn } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
 import { Flame, Eye, EyeOff, User, Mail, Lock, Phone, CheckCircle } from 'lucide-react'
+import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 
 export default function SignUpPage() {
+  const router = useRouter()
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', phone: '', password: '', confirm: '' })
   const [show, setShow] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -17,20 +19,38 @@ export default function SignUpPage() {
     if (form.password.length < 8) { setError('Password must be at least 8 characters'); return }
     setLoading(true)
     setError('')
-    // Register via API
-    const res = await fetch('/api/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ firstName: form.firstName, lastName: form.lastName, email: form.email, phone: form.phone, password: form.password }),
+    const supabase = getSupabaseBrowserClient()
+    const { error: signUpError } = await supabase.auth.signUp({
+      email: form.email,
+      password: form.password,
+      options: {
+        data: {
+          first_name: form.firstName,
+          last_name: form.lastName,
+          phone: form.phone,
+          role: 'user',
+        },
+      },
     })
-    const data = await res.json()
-    if (!res.ok) {
-      setError(data.error || 'Registration failed')
+
+    if (signUpError) {
+      setError(signUpError.message || 'Registration failed')
       setLoading(false)
       return
     }
-    // Auto sign in after register
-    await signIn('credentials', { email: form.email, password: form.password, callbackUrl: '/dashboard' })
+
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: form.email,
+      password: form.password,
+    })
+
+    if (signInError) {
+      setError('Account created. Please verify your email, then sign in.')
+      setLoading(false)
+      return
+    }
+
+    router.push('/dashboard')
   }
 
   const perks = [
@@ -136,7 +156,7 @@ export default function SignUpPage() {
           <div className="flex flex-col gap-3">
             <button
               type="button"
-              onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
+              onClick={() => setError('Google sign-up is not wired to Supabase yet.')}
               className="flex items-center justify-center gap-3 bg-white hover:bg-gray-50 text-gray-700 font-medium border border-gray-200 py-3 rounded-xl text-sm transition-all w-full shadow-sm"
             >
               <svg width="18" height="18" viewBox="0 0 24 24">
@@ -149,7 +169,7 @@ export default function SignUpPage() {
             </button>
             <button
               type="button"
-              onClick={() => signIn('credentials', { email: 'demo@privatefireapp.com', password: 'demo1234', callbackUrl: '/dashboard' })}
+              onClick={() => setError('Apple sign-up is not wired to Supabase yet.')}
               className="flex items-center justify-center gap-3 bg-gray-900 hover:bg-gray-800 text-white border border-gray-700 py-3 rounded-xl text-sm transition-all w-full font-medium"
             >
               <svg viewBox="0 0 24 24" fill="white" width="18" height="18"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.3.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
