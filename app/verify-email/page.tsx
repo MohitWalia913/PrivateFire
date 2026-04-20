@@ -1,16 +1,19 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
 import { Flame, Shield, Mail } from 'lucide-react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 
 export default function VerifyEmailPage() {
-  const searchParams = useSearchParams()
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState('')
-  const email = useMemo(() => searchParams.get('email') ?? '', [searchParams])
+  const [email, setEmail] = useState('')
+
+  useEffect(() => {
+    const emailParam = new URLSearchParams(window.location.search).get('email') ?? ''
+    setEmail(emailParam)
+  }, [])
 
   const handleResend = async () => {
     if (!email) {

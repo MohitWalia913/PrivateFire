@@ -1,18 +1,24 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { Flame, Eye, EyeOff, Mail, Lock, Shield } from 'lucide-react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [form, setForm] = useState({ email: '', password: '' })
   const [show, setShow] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(searchParams.get('error') ?? '')
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    const errorParam = new URLSearchParams(window.location.search).get('error')
+    if (errorParam) {
+      setError(errorParam)
+    }
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
