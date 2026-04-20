@@ -19,38 +19,38 @@ export default function SignUpPage() {
     if (form.password.length < 8) { setError('Password must be at least 8 characters'); return }
     setLoading(true)
     setError('')
-    const supabase = getSupabaseBrowserClient()
-    const { error: signUpError } = await supabase.auth.signUp({
-      email: form.email,
-      password: form.password,
-      options: {
-        data: {
-          first_name: form.firstName,
-          last_name: form.lastName,
-          phone: form.phone,
-          role: 'user',
+    try {
+      const supabase = getSupabaseBrowserClient()
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email: form.email,
+        password: form.password,
+        options: {
+          data: {
+            first_name: form.firstName,
+            last_name: form.lastName,
+            phone: form.phone,
+            role: 'user',
+          },
+          emailRedirectTo: `${window.location.origin}/auth/confirm?next=/dashboard`,
         },
-      },
-    })
+      })
 
-    if (signUpError) {
-      setError(signUpError.message || 'Registration failed')
+      if (signUpError) {
+        setError(signUpError.message || 'Registration failed')
+        setLoading(false)
+        return
+      }
+
+      if (!data.session) {
+        router.push(`/verify-email?email=${encodeURIComponent(form.email)}`)
+        return
+      }
+
+      router.push('/dashboard')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Registration failed')
       setLoading(false)
-      return
     }
-
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: form.email,
-      password: form.password,
-    })
-
-    if (signInError) {
-      setError('Account created. Please verify your email, then sign in.')
-      setLoading(false)
-      return
-    }
-
-    router.push('/dashboard')
   }
 
   const perks = [

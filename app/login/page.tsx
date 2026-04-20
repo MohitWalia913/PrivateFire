@@ -2,32 +2,37 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Flame, Eye, EyeOff, Mail, Lock, Shield } from 'lucide-react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [form, setForm] = useState({ email: '', password: '' })
   const [show, setShow] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(searchParams.get('error') ?? '')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setLoading(true)
 
-    const supabase = getSupabaseBrowserClient()
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: form.email,
-      password: form.password,
-    })
+    try {
+      const supabase = getSupabaseBrowserClient()
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: form.email,
+        password: form.password,
+      })
 
-    if (signInError) {
-      setError(signInError.message || 'Invalid email or password. Please try again.')
-    } else {
-      router.push('/dashboard')
+      if (signInError) {
+        setError(signInError.message || 'Invalid email or password. Please try again.')
+      } else {
+        router.push('/dashboard')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to sign in right now.')
     }
 
     setLoading(false)
