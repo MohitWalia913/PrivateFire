@@ -101,8 +101,8 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <p className="text-gray-500 text-sm">Welcome back</p>
-            <h1 classuser_metadata?.first_name || user?.email?.split('@')[0] || 'User'="text-2xl font-black text-gray-900">
-              {user?.name} <span className="text-orange-400">🔥</span>
+            <h1 className="text-2xl font-black text-gray-900">
+              {user?.user_metadata?.first_name || user?.email?.split('@')[0] || 'User'} <span className="text-orange-400">🔥</span>
             </h1>
           </div>
           <div className="flex items-center gap-3">

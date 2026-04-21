@@ -169,28 +169,6 @@ export default function Navbar() {
                 Sign Up Free
               </Link>
             </>
-          )}}
-              className="text-orange-500 text-left"
-            >
-              Sign Out ({session.user?.name})
-            </button>
-          ) : (
-            <div className="flex flex-col gap-2 pt-2 border-t border-gray-200">
-              <Link
-                href="/login"
-                onClick={() => setOpen(false)}
-                className="text-gray-700 hover:text-orange-500"
-              >
-                Sign In
-              </Link>
-              <Link
-                href="/signup"
-                onClick={() => setOpen(false)}
-                className="bg-orange-500 text-white font-semibold text-center px-4 py-2 rounded-full"
-              >
-                Sign Up Free
-              </Link>
-            </div>
           )}
         </div>
       )}
