@@ -3,12 +3,14 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { useSession } from 'next-auth/react'
 import { User, Mail, Phone, MapPin, Lock, ChevronLeft, CheckCircle, Eye, EyeOff, Home } from 'lucide-react'
+import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import type { User as SupabaseUser } from '@supabase/supabase-js'
 
 export default function EditProfilePage() {
   const router = useRouter()
-  const { data: session, status } = useSession()
+  const [user, setUser] = useState<SupabaseUser | null>(null)
+  const [loading, setLoading] = useState(true)
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
@@ -26,15 +28,32 @@ export default function EditProfilePage() {
   const [pwError, setPwError] = useState('')
 
   useEffect(() => {
-    if (status === 'unauthenticated') { router.push('/login'); return }
-    if (status === 'authenticated' && session?.user) {
-      const name = session.user.name || ''
-      const parts = name.split(' ')
-      setFirstName(parts[0] || '')
-      setLastName(parts.slice(1).join(' ') || '')
-      setEmail(session.user.email || '')
+    const checkAuth = async () => {
+      try {
+        const supabase = getSupabaseBrowserClient()
+        const { data: { session } } = await supabase.auth.getSession()
+        
+        if (!session?.user) {
+          router.push('/login')
+          return
+        }
+
+        setUser(session.user)
+        const metadata = session.user.user_metadata
+        setFirstName(metadata?.first_name || '')
+        setLastName(metadata?.last_name || '')
+        setEmail(session.user.email || '')
+        setPhone(metadata?.phone || '')
+      } catch (err) {
+        console.error('Auth check error:', err)
+        router.push('/login')
+      } finally {
+        setLoading(false)
+      }
     }
-  }, [status, session, router])
+
+    checkAuth()
+  }, [])
 
   const saveProfile = () => {
     // Update local state only (full persistence needs a DB)
@@ -52,11 +71,13 @@ export default function EditProfilePage() {
     setTimeout(() => setPwSaved(false), 3000)
   }
 
-  if (status === 'loading' || status === 'unauthenticated') return (
+  if (loading) return (
     <div className="min-h-screen bg-[#f8f7f5] flex items-center justify-center">
       <div className="w-10 h-10 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
     </div>
   )
+
+  if (!user) return null
 
   return (
     <div className="min-h-screen bg-[#f8f7f5] pt-20 pb-20">

@@ -2,25 +2,52 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Menu, X, Flame } from 'lucide-react'
-import { useSession, signOut } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
+import { Menu, X, Flame, LogOut } from 'lucide-react'
 import { usePathname } from 'next/navigation'
+import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import type { User } from '@supabase/supabase-js'
 
 export default function Navbar() {
   const [open, setOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
-  const { data: session } = useSession()
+  const [user, setUser] = useState<User | null>(null)
+  const router = useRouter()
   const pathname = usePathname()
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
     window.addEventListener('scroll', onScroll)
+    
+    // Check auth status
+    const checkAuth = async () => {
+      try {
+        const supabase = getSupabaseBrowserClient()
+        const { data: { session } } = await supabase.auth.getSession()
+        setUser(session?.user || null)
+      } catch (err) {
+        console.error('Auth check error:', err)
+      }
+    }
+    checkAuth()
+
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
   // ✅ hooks ke baad condition (important fix)
   if (pathname.startsWith('/signup') || pathname.startsWith('/login')) {
     return null
+  }
+
+  const handleLogout = async () => {
+    try {
+      const supabase = getSupabaseBrowserClient()
+      await supabase.auth.signOut()
+      setUser(null)
+      router.push('/')
+    } catch (err) {
+      console.error('Logout error:', err)
+    }
   }
 
   const links = [
@@ -66,19 +93,19 @@ export default function Navbar() {
 
           {/* CTA */}
           <div className="hidden md:flex items-center gap-3">
-            {session ? (
+            {user ? (
               <>
                 <Link
                   href="/dashboard"
                   className="text-sm text-gray-700 hover:text-orange-500 font-medium"
                 >
-                  {session.user?.name}
+                  {user.user_metadata?.first_name || user.email?.split('@')[0]}
                 </Link>
                 <button
-                  onClick={() => signOut({ callbackUrl: '/' })}
-                  className="text-sm text-gray-500 hover:text-gray-900 border border-gray-200 px-3 py-1.5 rounded-full"
+                  onClick={handleLogout}
+                  className="text-sm text-gray-500 hover:text-gray-900 border border-gray-200 px-3 py-1.5 rounded-full flex items-center gap-1"
                 >
-                  Sign Out
+                  <LogOut size={14} /> Sign Out
                 </button>
               </>
             ) : (
@@ -123,9 +150,26 @@ export default function Navbar() {
             </Link>
           ))}
 
-          {session ? (
+          {user ? (
             <button
-              onClick={() => signOut({ callbackUrl: '/' })}
+              onClick={() => {
+                handleLogout()
+                setOpen(false)
+              }}
+              className="text-left text-gray-700 hover:text-orange-500 font-medium"
+            >
+              Sign Out
+            </button>
+          ) : (
+            <>
+              <Link href="/login" onClick={() => setOpen(false)} className="text-gray-700 hover:text-orange-500 font-medium">
+                Sign In
+              </Link>
+              <Link href="/signup" onClick={() => setOpen(false)} className="text-orange-500 hover:text-orange-400 font-semibold">
+                Sign Up Free
+              </Link>
+            </>
+          )}}
               className="text-orange-500 text-left"
             >
               Sign Out ({session.user?.name})

@@ -3,15 +3,16 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { useSession } from 'next-auth/react'
 import { FileText, ChevronLeft, CheckCircle, Shield, Clock, AlertTriangle, Edit3, User, Home } from 'lucide-react'
+import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import type { User as SupabaseUser } from '@supabase/supabase-js'
 
 type CoverageStatus = 'not_covered' | 'pending' | 'active'
 
 export default function MyApplicationPage() {
   const router = useRouter()
-  const { data: session, status } = useSession()
-  const user = session?.user ? { name: session.user.name ?? 'User', email: session.user.email ?? '' } : null
+  const [user, setUser] = useState<SupabaseUser | null>(null)
+  const [loading, setLoading] = useState(true)
 
   const [applicationStatus] = useState<CoverageStatus>('not_covered')
   const [isEditing, setIsEditing] = useState(false)
@@ -32,15 +33,35 @@ export default function MyApplicationPage() {
   })
 
   useEffect(() => {
-    if (status === 'unauthenticated') { router.push('/login') }
-  }, [status, router])
+    const checkAuth = async () => {
+      try {
+        const supabase = getSupabaseBrowserClient()
+        const { data: { session } } = await supabase.auth.getSession()
+        
+        if (!session?.user) {
+          router.push('/login')
+          return
+        }
 
-  useEffect(() => {
-    if (user) {
-      const names = (user.name ?? '').split(' ')
-      setForm(f => ({ ...f, firstName: names[0] ?? '', lastName: names.slice(1).join(' ') ?? '', email: user.email }))
+        setUser(session.user)
+        const metadata = session.user.user_metadata
+        setForm(f => ({
+          ...f,
+          firstName: metadata?.first_name || '',
+          lastName: metadata?.last_name || '',
+          email: session.user.email || '',
+          phone: metadata?.phone || '',
+        }))
+      } catch (err) {
+        console.error('Auth check error:', err)
+        router.push('/login')
+      } finally {
+        setLoading(false)
+      }
     }
-  }, [user?.name, user?.email])
+
+    checkAuth()
+  }, [])
 
   const statusConfig = {
     not_covered: {
@@ -77,11 +98,13 @@ export default function MyApplicationPage() {
     setIsEditing(false)
   }
 
-  if (status === 'loading' || status === 'unauthenticated') return (
+  if (loading) return (
     <div className="min-h-screen bg-[#f8f7f5] flex items-center justify-center">
       <div className="w-10 h-10 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
     </div>
   )
+
+  if (!user) return null
 
   return (
     <div className="min-h-screen bg-[#f8f7f5] pt-20 pb-20">

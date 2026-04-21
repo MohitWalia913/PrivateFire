@@ -78,14 +78,13 @@ export default function DashboardPage() {
     }
   }
 
-  consloading) return (
+  if (loading) return (
     <div className="min-h-screen bg-[#f8f7f5] flex items-center justify-center">
       <div className="w-10 h-10 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
     </div>
   )
 
-  if (!user) return nulled: 100, time: '3d ago', active: false },
-  ]
+  if (!user) return null
 
   if (status === 'loading') return (
     <div className="min-h-screen bg-[#f8f7f5] flex items-center justify-center">

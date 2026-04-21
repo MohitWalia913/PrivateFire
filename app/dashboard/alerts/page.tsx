@@ -3,13 +3,14 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { useSession } from 'next-auth/react'
 import { Bell, ChevronLeft, CheckCircle, MapPin, Mail, Phone, Zap, AlertTriangle, Flame } from 'lucide-react'
+import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import type { User as SupabaseUser } from '@supabase/supabase-js'
 
 export default function AlertSettingsPage() {
   const router = useRouter()
-  const { data: session, status } = useSession()
-  const user = session?.user ? { name: session.user.name ?? 'User', email: session.user.email ?? '', phone: undefined as string | undefined } : null
+  const [user, setUser] = useState<SupabaseUser | null>(null)
+  const [loading, setLoading] = useState(true)
   const [radius, setRadius] = useState(25)
   const [emailAlerts, setEmailAlerts] = useState(true)
   const [smsAlerts, setSmsAlerts] = useState(false)
@@ -18,8 +19,27 @@ export default function AlertSettingsPage() {
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    if (status === 'unauthenticated') { router.push('/login') }
-  }, [status, router])
+    const checkAuth = async () => {
+      try {
+        const supabase = getSupabaseBrowserClient()
+        const { data: { session } } = await supabase.auth.getSession()
+        
+        if (!session?.user) {
+          router.push('/login')
+          return
+        }
+
+        setUser(session.user)
+      } catch (err) {
+        console.error('Auth check error:', err)
+        router.push('/login')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    checkAuth()
+  }, [])
 
   const save = () => {
     setSaved(true)
@@ -33,11 +53,13 @@ export default function AlertSettingsPage() {
     </button>
   )
 
-  if (status === 'loading' || status === 'unauthenticated') return (
+  if (loading) return (
     <div className="min-h-screen bg-[#f8f7f5] flex items-center justify-center">
       <div className="w-10 h-10 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
     </div>
   )
+
+  if (!user) return null
 
   return (
     <div className="min-h-screen bg-[#f8f7f5] pt-20 pb-20">

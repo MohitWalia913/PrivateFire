@@ -1,15 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Footer from '@/components/Footer'
-import { useSession } from 'next-auth/react'
 import { Flame, Shield, MapPin, CheckCircle, Clock, AlertTriangle, ChevronRight, Search, User, Mail, Phone, Home, FileText, Star } from 'lucide-react'
 import { californiaZipPrefixes, getRiskLevel } from '@/lib/mockData'
+import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import type { User as SupabaseUser } from '@supabase/supabase-js'
 
 export default function ApplyPage() {
-  const { status } = useSession()
-  const loggedIn = status === 'authenticated'
+  const [user, setUser] = useState<SupabaseUser | null>(null)
+  const [loading, setLoading] = useState(true)
   const [zip, setZip] = useState('')
   const [zipChecked, setZipChecked] = useState(false)
   const [available, setAvailable] = useState(false)
@@ -18,7 +19,7 @@ export default function ApplyPage() {
   const [waitlistDone, setWaitlistDone] = useState(false)
   const [riskLevel, setRiskLevel] = useState<'extreme'|'high'|'moderate'|'low'>('high')
   const [submitted, setSubmitted] = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [appLoading, setAppLoading] = useState(false)
 
   const [form, setForm] = useState({
     firstName: '', lastName: '', email: '', phone: '',
@@ -26,6 +27,21 @@ export default function ApplyPage() {
     propertyType: '', homeValue: '', currentInsurance: '',
     notes: '',
   })
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const supabase = getSupabaseBrowserClient()
+        const { data: { session } } = await supabase.auth.getSession()
+        setUser(session?.user || null)
+      } catch (err) {
+        console.error('Auth check error:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    checkAuth()
+  }, [])
 
   const checkZip = () => {
     if (zip.length < 5) return
@@ -39,10 +55,10 @@ export default function ApplyPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!loggedIn) { window.location.href = '/signup'; return }
-    setLoading(true)
+    if (!user) { window.location.href = '/signup'; return }
+    setAppLoading(true)
     await new Promise(r => setTimeout(r, 900))
-    setLoading(false)
+    setAppLoading(false)
     setSubmitted(true)
   }
 
