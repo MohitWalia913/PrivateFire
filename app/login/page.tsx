@@ -49,8 +49,9 @@ export default function LoginPage() {
           return
         }
 
-        window.history.replaceState({}, '', '/dashboard')
-        router.push('/dashboard')
+        const destination = type === 'recovery' ? '/reset-password' : '/dashboard'
+        window.history.replaceState({}, '', destination)
+        router.push(destination)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unable to complete sign in from verification link.')
       }
@@ -131,7 +132,7 @@ export default function LoginPage() {
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs text-gray-600 font-medium">Password</label>
-                <a href="#" className="text-xs text-orange-500 hover:text-orange-400">Forgot password?</a>
+                <Link href="/forgot-password" className="text-xs text-orange-500 hover:text-orange-400">Forgot password?</Link>
               </div>
               <div className="relative">
                 <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
