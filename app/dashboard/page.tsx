@@ -20,6 +20,8 @@ export default function DashboardPage() {
   const [user, setUser] = useState<SupabaseUser | null>(null)
   const [profileName, setProfileName] = useState('')
   const [profilePhone, setProfilePhone] = useState('')
+  const [hasSubmittedApplication, setHasSubmittedApplication] = useState(false)
+  const [isApplicationApproved, setIsApplicationApproved] = useState(false)
   const [loading, setLoading] = useState(true)
   const [alertRadius, setAlertRadius] = useState(25)
   const mockAlerts = [
@@ -82,12 +84,20 @@ export default function DashboardPage() {
         }
 
         if (application?.approved) {
+          setHasSubmittedApplication(true)
+          setIsApplicationApproved(true)
           setCoverageStatus('active')
         } else if (application?.submitted) {
+          setHasSubmittedApplication(true)
+          setIsApplicationApproved(false)
           setCoverageStatus('pending')
         } else if (profile) {
+          setHasSubmittedApplication(false)
+          setIsApplicationApproved(false)
           setCoverageStatus(profile.coverage_status)
         } else {
+          setHasSubmittedApplication(false)
+          setIsApplicationApproved(false)
           setCoverageStatus('not_covered')
         }
       } catch (err) {
@@ -407,9 +417,9 @@ export default function DashboardPage() {
               <div className="space-y-3">
                 {[
                   { icon: CheckCircle, label: 'Account Created', detail: 'Complete', done: true },
-                  { icon: FileText, label: 'Application Submitted', detail: coverageStatus !== 'not_covered' ? 'Submitted' : 'Not yet submitted', done: coverageStatus !== 'not_covered' },
-                  { icon: Zap, label: 'Property Assessment', detail: 'Scheduled after approval', done: false },
-                  { icon: Shield, label: 'Protection Active', detail: coverageStatus === 'active' ? 'Coverage active' : 'Pending approval', done: coverageStatus === 'active' },
+                  { icon: FileText, label: 'Application Submitted', detail: hasSubmittedApplication ? 'Submitted' : 'Not yet submitted', done: hasSubmittedApplication },
+                  { icon: Zap, label: 'Property Assessment', detail: isApplicationApproved ? 'Assessment in progress' : 'Scheduled after approval', done: isApplicationApproved },
+                  { icon: Shield, label: 'Protection Active', detail: isApplicationApproved ? 'Coverage active' : 'Pending approval', done: isApplicationApproved },
                 ].map((item, i) => (
                   <div key={i} className="flex items-start gap-3">
                     <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${item.done ? 'bg-orange-50 border border-orange-200' : 'bg-gray-100 border border-gray-200'}`}>
