@@ -19,6 +19,17 @@ export default function DashboardPage() {
   const [user, setUser] = useState<SupabaseUser | null>(null)
   const [loading, setLoading] = useState(true)
   const [alertRadius, setAlertRadius] = useState(25)
+  const mockAlerts = [
+    { name: 'Malibu Canyon Fire', distance: '8.4 mi', acres: 1240, time: 'Updated 12m ago', contained: 62, active: true },
+    { name: 'Topanga Ridge Fire', distance: '16.2 mi', acres: 420, time: 'Updated 28m ago', contained: 88, active: true },
+    { name: 'Ventura Brush Fire', distance: '31.7 mi', acres: 96, time: 'Updated 1h ago', contained: 100, active: false },
+  ]
+  const riskData = {
+    level: 'High',
+    score: 78,
+    bg: 'bg-orange-50 border-orange-200',
+    color: 'text-orange-600',
+  }
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -85,13 +96,6 @@ export default function DashboardPage() {
   )
 
   if (!user) return null
-
-  if (status === 'loading') return (
-    <div className="min-h-screen bg-[#f8f7f5] flex items-center justify-center">
-      <div className="w-10 h-10 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
-    </div>
-  )
-  if (status === 'unauthenticated') { router.push('/login'); return null }
 
   return (
     <div className="min-h-screen bg-[#f8f7f5] pt-20 pb-20">
@@ -222,12 +226,12 @@ export default function DashboardPage() {
             </div>
             <div className="space-y-3">
               <div>
-                <p className="text-gray-500 text-xs">Full Name</p
-                  {user?.user_metadata?.first_name && user?.user_metadata?.last_name 
+                <p className="text-gray-500 text-xs">Full Name</p>
+                <p className="text-gray-900 text-sm font-medium">
+                  {user?.user_metadata?.first_name && user?.user_metadata?.last_name
                     ? `${user.user_metadata.first_name} ${user.user_metadata.last_name}`
                     : user?.email?.split('@')[0] || 'User'}
-                
-                <p className="text-gray-900 text-sm font-medium">{user?.name}</p>
+                </p>
               </div>
               <div>
                 <p className="text-gray-500 text-xs">Email</p>

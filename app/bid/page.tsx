@@ -14,7 +14,6 @@ export default function ApplyPage() {
   const [zip, setZip] = useState('')
   const [zipChecked, setZipChecked] = useState(false)
   const [available, setAvailable] = useState(false)
-  const [onWaitlist, setOnWaitlist] = useState(false)
   const [waitlistEmail, setWaitlistEmail] = useState('')
   const [waitlistDone, setWaitlistDone] = useState(false)
   const [riskLevel, setRiskLevel] = useState<'extreme'|'high'|'moderate'|'low'>('high')
@@ -49,7 +48,6 @@ export default function ApplyPage() {
     setAvailable(isCA)
     setRiskLevel(getRiskLevel(zip))
     setZipChecked(true)
-    setOnWaitlist(false)
     setWaitlistDone(false)
   }
 
@@ -324,7 +322,7 @@ export default function ApplyPage() {
 
                     {/* Submit */}
                     <div className="pt-2">
-                      {!loggedIn && (
+                      {!user && (
                         <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 mb-4 flex items-start gap-3">
                           <AlertTriangle size={15} className="text-orange-500 flex-shrink-0 mt-0.5" />
                           <p className="text-orange-700 text-sm">
