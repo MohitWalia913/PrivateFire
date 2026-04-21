@@ -24,6 +24,24 @@ export type AlertSettingsRow = {
   push_alerts: boolean
 }
 
+export type CoverageApplicationRow = {
+  user_id: string
+  first_name: string
+  last_name: string
+  email: string
+  phone: string
+  address: string
+  city: string
+  state: string
+  zip: string
+  property_type: string
+  home_value: string
+  has_insurance: string
+  additional_info: string | null
+  submitted: boolean
+  approved: boolean
+}
+
 export async function getUserProfile(
   supabase: SupabaseClient,
   userId: string,
@@ -65,5 +83,27 @@ export async function upsertAlertSettings(
   row: Partial<AlertSettingsRow> & { user_id: string },
 ) {
   const { error } = await supabase.from('user_alert_settings').upsert(row, { onConflict: 'user_id' })
+  if (error) throw error
+}
+
+export async function getCoverageApplication(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<CoverageApplicationRow | null> {
+  const { data, error } = await supabase
+    .from('coverage_applications')
+    .select('user_id, first_name, last_name, email, phone, address, city, state, zip, property_type, home_value, has_insurance, additional_info, submitted, approved')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (error) throw error
+  return data
+}
+
+export async function upsertCoverageApplication(
+  supabase: SupabaseClient,
+  row: Partial<CoverageApplicationRow> & { user_id: string },
+) {
+  const { error } = await supabase.from('coverage_applications').upsert(row, { onConflict: 'user_id' })
   if (error) throw error
 }

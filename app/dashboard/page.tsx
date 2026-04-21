@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { Flame, Shield, Phone, MapPin, Bell, AlertTriangle, CheckCircle, Clock, TrendingUp, LogOut, User, ChevronRight, Zap, Home, FileText, Plus } from 'lucide-react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
-import { getAlertSettings, getUserProfile } from '@/lib/supabase/user-data'
+import { getAlertSettings, getCoverageApplication, getUserProfile } from '@/lib/supabase/user-data'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 
 const FireMap = dynamic(() => import('@/components/FireMap'), { ssr: false, loading: () => (
@@ -46,9 +46,10 @@ export default function DashboardPage() {
         }
 
         setUser(session.user)
-        const [profile, settings] = await Promise.all([
+        const [profile, settings, application] = await Promise.all([
           getUserProfile(supabase, session.user.id),
           getAlertSettings(supabase, session.user.id),
+          getCoverageApplication(supabase, session.user.id),
         ])
 
         if (profile) {
@@ -58,8 +59,6 @@ export default function DashboardPage() {
               : profile.first_name || session.user.email?.split('@')[0] || 'User',
           )
           setProfilePhone(profile.phone || '')
-          setCoverageStatus(profile.coverage_status)
-
           if (profile.address_line1 && profile.city && profile.state && profile.zip_code) {
             setAddresses([{
               label: 'Primary Property',
@@ -80,6 +79,16 @@ export default function DashboardPage() {
 
         if (settings) {
           setAlertRadius(settings.alert_radius_miles)
+        }
+
+        if (application?.approved) {
+          setCoverageStatus('active')
+        } else if (application?.submitted) {
+          setCoverageStatus('pending')
+        } else if (profile) {
+          setCoverageStatus(profile.coverage_status)
+        } else {
+          setCoverageStatus('not_covered')
         }
       } catch (err) {
         console.error('Auth check error:', err)

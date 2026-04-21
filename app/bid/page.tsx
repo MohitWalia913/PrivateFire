@@ -6,6 +6,7 @@ import Footer from '@/components/Footer'
 import { Flame, Shield, MapPin, CheckCircle, Clock, AlertTriangle, ChevronRight, Search, User, Mail, Phone, Home, FileText, Star } from 'lucide-react'
 import { californiaZipPrefixes, getRiskLevel } from '@/lib/mockData'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { upsertCoverageApplication, upsertUserProfile } from '@/lib/supabase/user-data'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 
 export default function ApplyPage() {
@@ -19,6 +20,7 @@ export default function ApplyPage() {
   const [riskLevel, setRiskLevel] = useState<'extreme'|'high'|'moderate'|'low'>('high')
   const [submitted, setSubmitted] = useState(false)
   const [appLoading, setAppLoading] = useState(false)
+  const [submitError, setSubmitError] = useState('')
 
   const [form, setForm] = useState({
     firstName: '', lastName: '', email: '', phone: '',
@@ -55,9 +57,44 @@ export default function ApplyPage() {
     e.preventDefault()
     if (!user) { window.location.href = '/signup'; return }
     setAppLoading(true)
-    await new Promise(r => setTimeout(r, 900))
-    setAppLoading(false)
-    setSubmitted(true)
+    setSubmitError('')
+    try {
+      const supabase = getSupabaseBrowserClient()
+      await upsertCoverageApplication(supabase, {
+        user_id: user.id,
+        first_name: form.firstName.trim(),
+        last_name: form.lastName.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim(),
+        address: form.address.trim(),
+        city: form.city.trim(),
+        state: form.state.trim().toUpperCase(),
+        zip: zip.trim(),
+        property_type: form.propertyType,
+        home_value: form.homeValue,
+        has_insurance: form.currentInsurance,
+        additional_info: form.notes.trim() || null,
+        submitted: true,
+      })
+
+      await upsertUserProfile(supabase, {
+        user_id: user.id,
+        first_name: form.firstName.trim() || null,
+        last_name: form.lastName.trim() || null,
+        phone: form.phone.trim() || null,
+        address_line1: form.address.trim() || null,
+        city: form.city.trim() || null,
+        state: form.state.trim().toUpperCase() || null,
+        zip_code: zip.trim() || null,
+        coverage_status: 'pending',
+      })
+
+      setSubmitted(true)
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Unable to submit application.')
+    } finally {
+      setAppLoading(false)
+    }
   }
 
   const riskColors: Record<string, { bar: string; badge: string; text: string }> = {
@@ -322,6 +359,11 @@ export default function ApplyPage() {
 
                     {/* Submit */}
                     <div className="pt-2">
+                      {submitError && (
+                        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4 text-red-700 text-sm">
+                          {submitError}
+                        </div>
+                      )}
                       {!user && (
                         <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 mb-4 flex items-start gap-3">
                           <AlertTriangle size={15} className="text-orange-500 flex-shrink-0 mt-0.5" />
@@ -333,10 +375,10 @@ export default function ApplyPage() {
                           </p>
                         </div>
                       )}
-                      <button type="submit" disabled={loading}
+                      <button type="submit" disabled={appLoading}
                         className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-60 text-white font-black py-4 rounded-2xl btn-glow transition-all text-base flex items-center justify-center gap-2">
                         <Flame size={18} />
-                        {loading ? 'Submitting Application...' : 'Submit Application for Coverage'}
+                        {appLoading ? 'Submitting Application...' : 'Submit Application for Coverage'}
                       </button>
                       <p className="text-center text-gray-400 text-xs mt-3">
                         By submitting you agree to our{' '}

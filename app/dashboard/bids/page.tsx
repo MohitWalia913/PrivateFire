@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { FileText, ChevronLeft, CheckCircle, Shield, Clock, AlertTriangle, Edit3, User, Home } from 'lucide-react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { getCoverageApplication, upsertCoverageApplication, upsertUserProfile } from '@/lib/supabase/user-data'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 
 type CoverageStatus = 'not_covered' | 'pending' | 'active'
@@ -14,9 +15,11 @@ export default function MyApplicationPage() {
   const [user, setUser] = useState<SupabaseUser | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const [applicationStatus] = useState<CoverageStatus>('not_covered')
+  const [applicationStatus, setApplicationStatus] = useState<CoverageStatus>('not_covered')
   const [isEditing, setIsEditing] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
@@ -52,6 +55,34 @@ export default function MyApplicationPage() {
           email: session.user.email || '',
           phone: metadata?.phone || '',
         }))
+
+        const application = await getCoverageApplication(supabase, session.user.id)
+        if (application) {
+          setForm({
+            firstName: application.first_name,
+            lastName: application.last_name,
+            email: application.email,
+            phone: application.phone,
+            address: application.address,
+            city: application.city,
+            state: application.state || 'CA',
+            zip: application.zip,
+            propertyType: application.property_type || 'Single Family Home',
+            homeValue: application.home_value,
+            hasInsurance: application.has_insurance,
+            additionalInfo: application.additional_info || '',
+          })
+          setSubmitted(application.submitted)
+          if (application.approved) {
+            setApplicationStatus('active')
+          } else if (application.submitted) {
+            setApplicationStatus('pending')
+          } else {
+            setApplicationStatus('not_covered')
+          }
+        } else {
+          setIsEditing(true)
+        }
       } catch (err) {
         console.error('Auth check error:', err)
         router.push('/login')
@@ -92,10 +123,51 @@ export default function MyApplicationPage() {
 
   const cfg = statusConfig[applicationStatus]
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setSubmitted(true)
-    setIsEditing(false)
+    if (!user) return
+
+    setSaving(true)
+    setError('')
+    try {
+      const supabase = getSupabaseBrowserClient()
+      await upsertCoverageApplication(supabase, {
+        user_id: user.id,
+        first_name: form.firstName.trim(),
+        last_name: form.lastName.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim(),
+        address: form.address.trim(),
+        city: form.city.trim(),
+        state: form.state.trim().toUpperCase(),
+        zip: form.zip.trim(),
+        property_type: form.propertyType,
+        home_value: form.homeValue,
+        has_insurance: form.hasInsurance,
+        additional_info: form.additionalInfo.trim() || null,
+        submitted: true,
+      })
+
+      await upsertUserProfile(supabase, {
+        user_id: user.id,
+        first_name: form.firstName.trim() || null,
+        last_name: form.lastName.trim() || null,
+        phone: form.phone.trim() || null,
+        address_line1: form.address.trim() || null,
+        city: form.city.trim() || null,
+        state: form.state.trim().toUpperCase() || null,
+        zip_code: form.zip.trim() || null,
+        coverage_status: 'pending',
+      })
+
+      setSubmitted(true)
+      setApplicationStatus('pending')
+      setIsEditing(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to save application.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (loading) return (
@@ -148,6 +220,7 @@ export default function MyApplicationPage() {
             </div>
           </div>
         )}
+        {error && <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-6 text-sm text-red-700">{error}</div>}
 
         <form onSubmit={handleSubmit}>
 
@@ -299,8 +372,9 @@ export default function MyApplicationPage() {
             {isEditing ? (
               <>
                 <button type="submit"
-                  className="bg-orange-500 hover:bg-orange-600 text-white font-bold px-8 py-3 rounded-full btn-glow transition-all text-sm">
-                  Submit Application
+                  disabled={saving}
+                  className="bg-orange-500 hover:bg-orange-600 disabled:opacity-60 text-white font-bold px-8 py-3 rounded-full btn-glow transition-all text-sm">
+                  {saving ? 'Saving...' : submitted ? 'Update Application' : 'Submit Application'}
                 </button>
                 <button type="button" onClick={() => setIsEditing(false)}
                   className="bg-white border border-gray-200 text-gray-700 hover:text-gray-900 font-medium px-6 py-3 rounded-full text-sm transition-all">
