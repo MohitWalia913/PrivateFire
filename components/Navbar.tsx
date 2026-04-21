@@ -35,7 +35,13 @@ export default function Navbar() {
   }, [])
 
   // ✅ hooks ke baad condition (important fix)
-  if (pathname.startsWith('/signup') || pathname.startsWith('/login')) {
+  if (
+    pathname.startsWith('/signup') ||
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/verify-email') ||
+    pathname.startsWith('/forgot-password') ||
+    pathname.startsWith('/reset-password')
+  ) {
     return null
   }
 
