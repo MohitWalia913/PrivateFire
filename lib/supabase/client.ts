@@ -8,7 +8,10 @@ function getRequiredPublicEnv(name: 'NEXT_PUBLIC_SUPABASE_URL' | 'NEXT_PUBLIC_SU
   const value = process.env[name]
 
   if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`)
+    const message = `Missing required environment variable: ${name}. Please ensure this is set in your Vercel environment variables or .env.local file.`
+    console.error(message)
+    console.error('Available env vars:', Object.keys(process.env).filter(k => k.includes('SUPABASE')))
+    throw new Error(message)
   }
 
   return value
@@ -20,7 +23,10 @@ function getPublicSupabaseKey(): string {
   const resolvedKey = anonKey || publishableKey
 
   if (!resolvedKey) {
-    throw new Error('Missing required environment variable: NEXT_PUBLIC_SUPABASE_ANON_KEY (or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)')
+    const message = 'Missing required environment variable: NEXT_PUBLIC_SUPABASE_ANON_KEY. Please ensure this is set in your Vercel environment variables or .env.local file.'
+    console.error(message)
+    console.error('Available env vars:', Object.keys(process.env).filter(k => k.includes('SUPABASE')))
+    throw new Error(message)
   }
 
   return resolvedKey
@@ -37,3 +43,4 @@ export function getSupabaseBrowserClient(): SupabaseClient {
   supabaseBrowserClient = createClient(supabaseUrl, supabaseAnonKey)
   return supabaseBrowserClient
 }
+

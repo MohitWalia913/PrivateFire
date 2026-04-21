@@ -48,7 +48,9 @@ export default function SignUpPage() {
 
       router.push('/dashboard')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed')
+      const errorMsg = err instanceof Error ? err.message : 'Registration failed'
+      console.error('Signup error:', err)
+      setError(errorMsg)
       setLoading(false)
     }
   }

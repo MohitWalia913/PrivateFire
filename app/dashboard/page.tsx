@@ -1,11 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useSession, signOut as nextAuthSignOut } from 'next-auth/react'
 import dynamic from 'next/dynamic'
 import { Flame, Shield, Phone, MapPin, Bell, AlertTriangle, CheckCircle, Clock, TrendingUp, LogOut, User, ChevronRight, Zap, Home, FileText, Plus } from 'lucide-react'
+import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import type { User as SupabaseUser } from '@supabase/supabase-js'
 
 const FireMap = dynamic(() => import('@/components/FireMap'), { ssr: false, loading: () => (
   <div className="w-full h-full bg-gray-50 flex items-center justify-center">
@@ -15,12 +16,45 @@ const FireMap = dynamic(() => import('@/components/FireMap'), { ssr: false, load
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { data: session, status } = useSession()
-  const user = session?.user ? {
-    name: session.user.name ?? 'User',
-    email: session.user.email ?? '',
-  } : null
+  const [user, setUser] = useState<SupabaseUser | null>(null)
+  const [loading, setLoading] = useState(true)
   const [alertRadius, setAlertRadius] = useState(25)
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const supabase = getSupabaseBrowserClient()
+        const { data: { session } } = await supabase.auth.getSession()
+        
+        if (!session?.user) {
+          router.push('/login')
+          return
+        }
+
+        setUser(session.user)
+      } catch (err) {
+        console.error('Auth check error:', err)
+        router.push('/login')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    checkAuth()
+
+    // Set up auth state listener
+    const supabase = getSupabaseBrowserClient()
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!session?.user) {
+        setUser(null)
+        router.push('/login')
+      } else {
+        setUser(session.user)
+      }
+    })
+
+    return () => subscription?.unsubscribe()
+  }, [])
 
   // Coverage status: 'not_covered' | 'pending' | 'active'
   // In production this would come from the database based on user's application
@@ -34,14 +68,23 @@ export default function DashboardPage() {
   // For new users, addresses start empty
   const [addresses] = useState<{ label: string; address: string; city: string; state: string; zip: string }[]>([])
 
-  const logout = () => nextAuthSignOut({ callbackUrl: '/' })
+  const logout = async () => {
+    try {
+      const supabase = getSupabaseBrowserClient()
+      await supabase.auth.signOut()
+      router.push('/')
+    } catch (err) {
+      console.error('Logout error:', err)
+    }
+  }
 
-  const riskData = { level: 'High', color: 'text-orange-600', bg: 'bg-orange-50 border-orange-200', score: 78 }
+  consloading) return (
+    <div className="min-h-screen bg-[#f8f7f5] flex items-center justify-center">
+      <div className="w-10 h-10 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
 
-  const mockAlerts = [
-    { name: 'Malibu Canyon Fire', distance: '8.2 mi', acres: 340, contained: 15, time: '2h ago', active: true },
-    { name: 'Topanga Brush Fire', distance: '12.5 mi', acres: 85, contained: 60, time: '1d ago', active: false },
-    { name: 'PCH Vegetation Fire', distance: '18.1 mi', acres: 22, contained: 100, time: '3d ago', active: false },
+  if (!user) return nulled: 100, time: '3d ago', active: false },
   ]
 
   if (status === 'loading') return (
@@ -59,7 +102,7 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <p className="text-gray-500 text-sm">Welcome back</p>
-            <h1 className="text-2xl font-black text-gray-900">
+            <h1 classuser_metadata?.first_name || user?.email?.split('@')[0] || 'User'="text-2xl font-black text-gray-900">
               {user?.name} <span className="text-orange-400">🔥</span>
             </h1>
           </div>
@@ -180,7 +223,11 @@ export default function DashboardPage() {
             </div>
             <div className="space-y-3">
               <div>
-                <p className="text-gray-500 text-xs">Full Name</p>
+                <p className="text-gray-500 text-xs">Full Name</p
+                  {user?.user_metadata?.first_name && user?.user_metadata?.last_name 
+                    ? `${user.user_metadata.first_name} ${user.user_metadata.last_name}`
+                    : user?.email?.split('@')[0] || 'User'}
+                
                 <p className="text-gray-900 text-sm font-medium">{user?.name}</p>
               </div>
               <div>
