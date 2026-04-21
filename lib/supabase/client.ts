@@ -5,7 +5,12 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 let supabaseBrowserClient: SupabaseClient | null = null
 
 function getRequiredPublicEnv(name: 'NEXT_PUBLIC_SUPABASE_URL' | 'NEXT_PUBLIC_SUPABASE_ANON_KEY'): string {
-  const value = process.env[name]
+  // In Next.js client code, env vars must be accessed statically.
+  // Dynamic index access like process.env[name] is not inlined in the browser bundle.
+  const value =
+    name === 'NEXT_PUBLIC_SUPABASE_URL'
+      ? process.env.NEXT_PUBLIC_SUPABASE_URL
+      : process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!value) {
     const message = `Missing required environment variable: ${name}. Please ensure this is set in your Vercel environment variables or .env.local file.`
