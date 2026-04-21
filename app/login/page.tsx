@@ -20,6 +20,45 @@ export default function LoginPage() {
     }
   }, [])
 
+  useEffect(() => {
+    const handleLegacyHashAuth = async () => {
+      if (typeof window === 'undefined') return
+
+      const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : ''
+      if (!hash) return
+
+      const hashParams = new URLSearchParams(hash)
+      const accessToken = hashParams.get('access_token')
+      const refreshToken = hashParams.get('refresh_token')
+      const type = hashParams.get('type')
+
+      // Support legacy Supabase confirmation links that return tokens in URL hash.
+      if (!accessToken || !refreshToken || (type !== 'signup' && type !== 'magiclink' && type !== 'recovery')) {
+        return
+      }
+
+      try {
+        const supabase = getSupabaseBrowserClient()
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        })
+
+        if (sessionError) {
+          setError(sessionError.message || 'Unable to complete sign in from verification link.')
+          return
+        }
+
+        window.history.replaceState({}, '', '/dashboard')
+        router.push('/dashboard')
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unable to complete sign in from verification link.')
+      }
+    }
+
+    void handleLegacyHashAuth()
+  }, [router])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
