@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { Flame, Shield, Phone, MapPin, Bell, AlertTriangle, CheckCircle, Clock, TrendingUp, LogOut, User, ChevronRight, Zap, Home, FileText, Plus } from 'lucide-react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { getAlertSettings, getUserProfile } from '@/lib/supabase/user-data'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 
 const FireMap = dynamic(() => import('@/components/FireMap'), { ssr: false, loading: () => (
@@ -17,6 +18,8 @@ const FireMap = dynamic(() => import('@/components/FireMap'), { ssr: false, load
 export default function DashboardPage() {
   const router = useRouter()
   const [user, setUser] = useState<SupabaseUser | null>(null)
+  const [profileName, setProfileName] = useState('')
+  const [profilePhone, setProfilePhone] = useState('')
   const [loading, setLoading] = useState(true)
   const [alertRadius, setAlertRadius] = useState(25)
   const mockAlerts = [
@@ -43,6 +46,41 @@ export default function DashboardPage() {
         }
 
         setUser(session.user)
+        const [profile, settings] = await Promise.all([
+          getUserProfile(supabase, session.user.id),
+          getAlertSettings(supabase, session.user.id),
+        ])
+
+        if (profile) {
+          setProfileName(
+            profile.first_name && profile.last_name
+              ? `${profile.first_name} ${profile.last_name}`
+              : profile.first_name || session.user.email?.split('@')[0] || 'User',
+          )
+          setProfilePhone(profile.phone || '')
+          setCoverageStatus(profile.coverage_status)
+
+          if (profile.address_line1 && profile.city && profile.state && profile.zip_code) {
+            setAddresses([{
+              label: 'Primary Property',
+              address: profile.address_line1,
+              city: profile.city,
+              state: profile.state,
+              zip: profile.zip_code,
+            }])
+          } else {
+            setAddresses([])
+          }
+        } else {
+          setProfileName(session.user.user_metadata?.first_name || session.user.email?.split('@')[0] || 'User')
+          setProfilePhone('')
+          setCoverageStatus('not_covered')
+          setAddresses([])
+        }
+
+        if (settings) {
+          setAlertRadius(settings.alert_radius_miles)
+        }
       } catch (err) {
         console.error('Auth check error:', err)
         router.push('/login')
@@ -67,17 +105,14 @@ export default function DashboardPage() {
     return () => subscription?.unsubscribe()
   }, [])
 
-  // Coverage status: 'not_covered' | 'pending' | 'active'
-  // In production this would come from the database based on user's application
-  const coverageStatus = 'not_covered' as 'not_covered' | 'pending' | 'active'
+  const [coverageStatus, setCoverageStatus] = useState<'not_covered' | 'pending' | 'active'>('not_covered')
   const coverageStatusConfig = {
     not_covered: { label: 'Not Covered', color: 'text-gray-500', bg: 'text-gray-400' },
     pending: { label: 'Pending Review', color: 'text-yellow-600', bg: 'text-yellow-500' },
     active: { label: 'Active', color: 'text-green-600', bg: 'text-green-500' },
   }
 
-  // For new users, addresses start empty
-  const [addresses] = useState<{ label: string; address: string; city: string; state: string; zip: string }[]>([])
+  const [addresses, setAddresses] = useState<{ label: string; address: string; city: string; state: string; zip: string }[]>([])
 
   const logout = async () => {
     try {
@@ -106,7 +141,7 @@ export default function DashboardPage() {
           <div>
             <p className="text-gray-500 text-sm">Welcome back</p>
             <h1 className="text-2xl font-black text-gray-900">
-              {user?.user_metadata?.first_name || user?.email?.split('@')[0] || 'User'} <span className="text-orange-400">🔥</span>
+              {profileName || user?.user_metadata?.first_name || user?.email?.split('@')[0] || 'User'} <span className="text-orange-400">🔥</span>
             </h1>
           </div>
           <div className="flex items-center gap-3">
@@ -228,14 +263,16 @@ export default function DashboardPage() {
               <div>
                 <p className="text-gray-500 text-xs">Full Name</p>
                 <p className="text-gray-900 text-sm font-medium">
-                  {user?.user_metadata?.first_name && user?.user_metadata?.last_name
-                    ? `${user.user_metadata.first_name} ${user.user_metadata.last_name}`
-                    : user?.email?.split('@')[0] || 'User'}
+                  {profileName || user?.email?.split('@')[0] || 'User'}
                 </p>
               </div>
               <div>
                 <p className="text-gray-500 text-xs">Email</p>
                 <p className="text-gray-900 text-sm font-medium">{user?.email}</p>
+              </div>
+              <div>
+                <p className="text-gray-500 text-xs">Phone</p>
+                <p className="text-gray-900 text-sm font-medium">{profilePhone || 'Not added yet'}</p>
               </div>
               <div className="pt-2 border-t border-gray-100">
                 <p className="text-gray-500 text-xs">Coverage Status</p>

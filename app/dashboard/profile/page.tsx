@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { User, Mail, Phone, MapPin, Lock, ChevronLeft, CheckCircle, Eye, EyeOff, Home } from 'lucide-react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { getUserProfile, upsertUserProfile } from '@/lib/supabase/user-data'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 
 export default function EditProfilePage() {
@@ -25,6 +26,7 @@ export default function EditProfilePage() {
   const [showPw, setShowPw] = useState(false)
   const [saved, setSaved] = useState(false)
   const [pwSaved, setPwSaved] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const [pwError, setPwError] = useState('')
 
   useEffect(() => {
@@ -44,6 +46,17 @@ export default function EditProfilePage() {
         setLastName(metadata?.last_name || '')
         setEmail(session.user.email || '')
         setPhone(metadata?.phone || '')
+
+        const profile = await getUserProfile(supabase, session.user.id)
+        if (profile) {
+          setFirstName(profile.first_name || metadata?.first_name || '')
+          setLastName(profile.last_name || metadata?.last_name || '')
+          setPhone(profile.phone || metadata?.phone || '')
+          setAddress(profile.address_line1 || '')
+          setCity(profile.city || '')
+          setState(profile.state || 'CA')
+          setZipCode(profile.zip_code || '')
+        }
       } catch (err) {
         console.error('Auth check error:', err)
         router.push('/login')
@@ -55,20 +68,58 @@ export default function EditProfilePage() {
     checkAuth()
   }, [])
 
-  const saveProfile = () => {
-    // Update local state only (full persistence needs a DB)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
+  const saveProfile = async () => {
+    if (!user) return
+
+    setSaveError('')
+    try {
+      const supabase = getSupabaseBrowserClient()
+      await upsertUserProfile(supabase, {
+        user_id: user.id,
+        first_name: firstName.trim() || null,
+        last_name: lastName.trim() || null,
+        phone: phone.trim() || null,
+        address_line1: address.trim() || null,
+        city: city.trim() || null,
+        state: state.trim().toUpperCase() || null,
+        zip_code: zipCode.trim() || null,
+      })
+
+      const { error: metaError } = await supabase.auth.updateUser({
+        data: {
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          phone: phone.trim(),
+        },
+      })
+      if (metaError) throw metaError
+
+      if (email && email !== user.email) {
+        const { error: emailError } = await supabase.auth.updateUser({ email })
+        if (emailError) throw emailError
+      }
+
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Unable to save profile.')
+    }
   }
 
-  const savePassword = () => {
+  const savePassword = async () => {
     setPwError('')
-    if (!currentPw) { setPwError('Enter your current password'); return }
-    if (newPw.length < 6) { setPwError('New password must be at least 6 characters'); return }
+    if (newPw.length < 8) { setPwError('New password must be at least 8 characters'); return }
     if (newPw !== confirmPw) { setPwError('Passwords do not match'); return }
-    setCurrentPw(''); setNewPw(''); setConfirmPw('')
-    setPwSaved(true)
-    setTimeout(() => setPwSaved(false), 3000)
+    try {
+      const supabase = getSupabaseBrowserClient()
+      const { error } = await supabase.auth.updateUser({ password: newPw })
+      if (error) throw error
+      setCurrentPw(''); setNewPw(''); setConfirmPw('')
+      setPwSaved(true)
+      setTimeout(() => setPwSaved(false), 3000)
+    } catch (err) {
+      setPwError(err instanceof Error ? err.message : 'Unable to update password.')
+    }
   }
 
   if (loading) return (
@@ -167,6 +218,7 @@ export default function EditProfilePage() {
             </span>
           )}
         </div>
+        {saveError && <p className="text-red-400 text-xs mb-5">{saveError}</p>}
 
         {/* Change Password */}
         <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">

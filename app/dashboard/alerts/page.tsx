@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Bell, ChevronLeft, CheckCircle, MapPin, Mail, Phone, Zap, AlertTriangle, Flame } from 'lucide-react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { getAlertSettings, getUserProfile, upsertAlertSettings } from '@/lib/supabase/user-data'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 
 export default function AlertSettingsPage() {
@@ -17,6 +18,9 @@ export default function AlertSettingsPage() {
   const [pushAlerts, setPushAlerts] = useState(true)
   const [threshold, setThreshold] = useState<'any' | 'major' | 'critical'>('any')
   const [saved, setSaved] = useState(false)
+  const [phone, setPhone] = useState('')
+  const [addressLabel, setAddressLabel] = useState('No address saved yet')
+  const [saveError, setSaveError] = useState('')
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -30,6 +34,25 @@ export default function AlertSettingsPage() {
         }
 
         setUser(session.user)
+        const [settings, profile] = await Promise.all([
+          getAlertSettings(supabase, session.user.id),
+          getUserProfile(supabase, session.user.id),
+        ])
+
+        if (settings) {
+          setRadius(settings.alert_radius_miles)
+          setThreshold(settings.threshold)
+          setEmailAlerts(settings.email_alerts)
+          setSmsAlerts(settings.sms_alerts)
+          setPushAlerts(settings.push_alerts)
+        }
+
+        if (profile) {
+          setPhone(profile.phone || '')
+          if (profile.address_line1 && profile.city && profile.state && profile.zip_code) {
+            setAddressLabel(`${profile.address_line1}, ${profile.city}, ${profile.state} ${profile.zip_code}`)
+          }
+        }
       } catch (err) {
         console.error('Auth check error:', err)
         router.push('/login')
@@ -41,9 +64,24 @@ export default function AlertSettingsPage() {
     checkAuth()
   }, [])
 
-  const save = () => {
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
+  const save = async () => {
+    if (!user) return
+    setSaveError('')
+    try {
+      const supabase = getSupabaseBrowserClient()
+      await upsertAlertSettings(supabase, {
+        user_id: user.id,
+        alert_radius_miles: radius,
+        threshold,
+        email_alerts: emailAlerts,
+        sms_alerts: smsAlerts,
+        push_alerts: pushAlerts,
+      })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Unable to save alert settings.')
+    }
   }
 
   const Toggle = ({ on, onClick }: { on: boolean; onClick: () => void }) => (
@@ -93,7 +131,7 @@ export default function AlertSettingsPage() {
             ))}
           </div>
           <p className="text-gray-600 text-xs mt-3 flex items-center gap-1.5">
-            <MapPin size={11} /> Monitoring: 123 Oak Ridge Drive, Malibu, CA 90265
+            <MapPin size={11} /> Monitoring: {addressLabel}
           </p>
         </div>
 
@@ -152,7 +190,7 @@ export default function AlertSettingsPage() {
                 </div>
                 <div>
                   <p className="text-gray-900 text-sm font-medium">SMS Alerts</p>
-                  <p className="text-gray-500 text-xs">{user?.phone || 'Add phone number in profile'}</p>
+                  <p className="text-gray-500 text-xs">{phone || 'Add phone number in profile'}</p>
                 </div>
               </div>
               <Toggle on={smsAlerts} onClick={() => setSmsAlerts(v => !v)} />
@@ -182,6 +220,7 @@ export default function AlertSettingsPage() {
             </span>
           )}
         </div>
+        {saveError && <p className="text-red-400 text-xs mt-3">{saveError}</p>}
 
       </div>
     </div>
