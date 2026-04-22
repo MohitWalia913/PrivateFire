@@ -4,9 +4,11 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Footer from '@/components/Footer'
 import { Flame, Shield, MapPin, CheckCircle, Clock, AlertTriangle, ChevronRight, Search, User, Mail, Phone, Home, FileText, Star } from 'lucide-react'
-import { californiaZipPrefixes, getRiskLevel } from '@/lib/mockData'
+import { californiaZipPrefixes } from '@/lib/mockData'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { upsertCoverageApplication, upsertUserProfile } from '@/lib/supabase/user-data'
+import { computeRiskScore, fetchCalFireList } from '@/lib/calfire'
+import { geocodeZip } from '@/lib/geocode'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 
 export default function ApplyPage() {
@@ -48,10 +50,26 @@ export default function ApplyPage() {
     if (zip.length < 5) return
     const isCA = californiaZipPrefixes.includes(zip.substring(0, 3))
     setAvailable(isCA)
-    setRiskLevel(getRiskLevel(zip))
     setZipChecked(true)
     setWaitlistDone(false)
   }
+
+  useEffect(() => {
+    const loadRisk = async () => {
+      if (!zipChecked || zip.length !== 5) return
+      try {
+        const [center, incidents] = await Promise.all([geocodeZip(zip), fetchCalFireList(true)])
+        if (!center) return
+        const risk = computeRiskScore(incidents.filter(i => i.IsActive), center)
+        const mapped: 'extreme' | 'high' | 'moderate' | 'low' =
+          risk.level === 'Extreme' ? 'extreme' : risk.level === 'High' ? 'high' : risk.level === 'Moderate' ? 'moderate' : 'low'
+        setRiskLevel(mapped)
+      } catch {
+        // Keep previously selected/default risk level on transient API failures.
+      }
+    }
+    void loadRisk()
+  }, [zip, zipChecked])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

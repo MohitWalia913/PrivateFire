@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { fireHeatmapData } from '@/lib/mockData'
+import { fetchCalFireGeoJson, type CalFireIncident } from '@/lib/calfire'
 import ContactModal from './ContactModal'
 import {
   Flame, AlertTriangle, RefreshCw, ChevronLeft, ChevronRight,
@@ -10,18 +10,7 @@ import {
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-interface FireIncident {
-  Name: string
-  AcresBurned: number
-  PercentContained: number
-  County: string
-  IsActive: boolean
-  Latitude: number
-  Longitude: number
-  Updated: string
-  Location: string
-  AdminUnit: string
-}
+type FireIncident = CalFireIncident
 
 interface LayerConfig {
   id: string
@@ -123,20 +112,6 @@ const LAYER_GROUPS = [
   { key: 'management', title: 'Management' },
 ] as const
 
-// ── Mock data fallback ─────────────────────────────────────────────────────
-
-const MOCK_FIRES: FireIncident[] = [
-  { Name: 'Palisades Fire', AcresBurned: 2100, PercentContained: 0, County: 'Los Angeles', IsActive: true, Latitude: 34.05, Longitude: -118.54, Updated: '', Location: 'Pacific Palisades', AdminUnit: 'CAL FIRE' },
-  { Name: 'Eaton Fire', AcresBurned: 980, PercentContained: 18, County: 'Los Angeles', IsActive: true, Latitude: 34.17, Longitude: -118.06, Updated: '', Location: 'Eaton Canyon', AdminUnit: 'CAL FIRE' },
-  { Name: 'Malibu Canyon Fire', AcresBurned: 1200, PercentContained: 5, County: 'Los Angeles', IsActive: true, Latitude: 34.07, Longitude: -118.72, Updated: '', Location: 'Malibu Canyon Rd', AdminUnit: 'CAL FIRE' },
-  { Name: 'Altadena Fire', AcresBurned: 340, PercentContained: 22, County: 'Los Angeles', IsActive: true, Latitude: 34.19, Longitude: -118.13, Updated: '', Location: 'Near Altadena', AdminUnit: 'CAL FIRE' },
-  { Name: 'Topanga Fire', AcresBurned: 85, PercentContained: 65, County: 'Los Angeles', IsActive: true, Latitude: 34.09, Longitude: -118.60, Updated: '', Location: 'Topanga State Park', AdminUnit: 'CAL FIRE' },
-  { Name: 'Sylmar Brush Fire', AcresBurned: 230, PercentContained: 40, County: 'Los Angeles', IsActive: true, Latitude: 34.32, Longitude: -118.44, Updated: '', Location: 'Near Sylmar', AdminUnit: 'CAL FIRE' },
-  { Name: 'Dixon Fire', AcresBurned: 450, PercentContained: 35, County: 'Ventura', IsActive: true, Latitude: 34.29, Longitude: -119.23, Updated: '', Location: 'Near Moorpark', AdminUnit: 'CAL FIRE' },
-  { Name: 'Shasta Valley Fire', AcresBurned: 3200, PercentContained: 55, County: 'Shasta', IsActive: true, Latitude: 40.56, Longitude: -122.38, Updated: '', Location: 'Shasta County', AdminUnit: 'CAL FIRE' },
-  { Name: 'Trinity Ridge Fire', AcresBurned: 1800, PercentContained: 30, County: 'Trinity', IsActive: true, Latitude: 40.76, Longitude: -122.63, Updated: '', Location: 'Trinity County', AdminUnit: 'CAL FIRE' },
-]
-
 // ── Build initial layer state ──────────────────────────────────────────────
 
 function buildInitialLayers(): Record<string, boolean> {
@@ -212,15 +187,11 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
   const fetchIncidents = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch('https://incidents.fire.ca.gov/umbraco/api/IncidentApi/GeoJsonList?inactive=false')
-      const data = await res.json()
-      const parsed: FireIncident[] = (data.features || [])
-        .map((f: { properties: FireIncident }) => f.properties)
-        .filter((p: FireIncident) => p.Latitude && p.Longitude)
-      setIncidents(parsed.length > 0 ? parsed : MOCK_FIRES)
-      setApiSource(parsed.length > 0 ? 'live' : 'demo')
+      const parsed = await fetchCalFireGeoJson(false)
+      setIncidents(parsed.filter(item => item.IsActive))
+      setApiSource('live')
     } catch {
-      setIncidents(MOCK_FIRES)
+      setIncidents([])
       setApiSource('demo')
     }
     setLastUpdated(new Date().toLocaleTimeString())
@@ -289,8 +260,15 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
       try {
         await import('leaflet.heat')
         if (!cancelled) {
+          const heatPoints = incidents
+            .filter(item => Number(item.Latitude) && Number(item.Longitude))
+            .map(item => [
+              item.Latitude,
+              item.Longitude,
+              Math.min(1, ((item.AcresBurned || 0) / 5000) + ((100 - (item.PercentContained || 0)) / 100) * 0.5),
+            ] as [number, number, number])
           // @ts-ignore leaflet.heat
-          const heatLayer = L.heatLayer(fireHeatmapData, {
+          const heatLayer = L.heatLayer(heatPoints, {
             radius: compact ? 28 : 40,
             blur: 25,
             maxZoom: 10,
@@ -318,7 +296,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compact])
+  }, [compact, incidents])
 
   // ── EFFECT 2: Add/remove incident markers ──────────────────────────────
 

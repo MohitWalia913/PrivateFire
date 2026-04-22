@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { Flame, Shield, Phone, MapPin, Bell, AlertTriangle, CheckCircle, Clock, TrendingUp, LogOut, User, ChevronRight, Zap, Home, FileText, Plus } from 'lucide-react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { computeRiskScore, fetchCalFireList, haversineMiles, toRelativeTime, type CalFireIncident } from '@/lib/calfire'
+import { geocodeAddress, geocodeZip } from '@/lib/geocode'
 import { getAlertSettings, getCoverageApplication, getUserProfile } from '@/lib/supabase/user-data'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 
@@ -24,17 +26,21 @@ export default function DashboardPage() {
   const [isApplicationApproved, setIsApplicationApproved] = useState(false)
   const [loading, setLoading] = useState(true)
   const [alertRadius, setAlertRadius] = useState(25)
-  const mockAlerts = [
-    { name: 'Malibu Canyon Fire', distance: '8.4 mi', acres: 1240, time: 'Updated 12m ago', contained: 62, active: true },
-    { name: 'Topanga Ridge Fire', distance: '16.2 mi', acres: 420, time: 'Updated 28m ago', contained: 88, active: true },
-    { name: 'Ventura Brush Fire', distance: '31.7 mi', acres: 96, time: 'Updated 1h ago', contained: 100, active: false },
-  ]
-  const riskData = {
-    level: 'High',
-    score: 78,
-    bg: 'bg-orange-50 border-orange-200',
-    color: 'text-orange-600',
-  }
+  const [alerts, setAlerts] = useState<Array<{
+    name: string
+    distanceMiles: number
+    acres: number
+    time: string
+    contained: number
+    active: boolean
+  }>>([])
+  const [riskData, setRiskData] = useState({
+    level: 'Moderate',
+    score: 45,
+    bg: 'bg-yellow-50 border-yellow-200',
+    color: 'text-yellow-600',
+  })
+  const [monitoringLabel, setMonitoringLabel] = useState('Monitoring California incidents')
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -100,6 +106,52 @@ export default function DashboardPage() {
           setIsApplicationApproved(false)
           setCoverageStatus('not_covered')
         }
+
+        const incidents = await fetchCalFireList(true)
+        const activeIncidents = incidents.filter(item => item.IsActive)
+
+        let center: { lat: number; lng: number } = { lat: 37.5, lng: -119.5 }
+        if (profile?.address_line1 && profile?.city && profile?.state) {
+          const fromAddress = await geocodeAddress(`${profile.address_line1}, ${profile.city}, ${profile.state} ${profile.zip_code || ''}`)
+          if (fromAddress) center = fromAddress
+        } else if (profile?.zip_code) {
+          const fromZip = await geocodeZip(profile.zip_code)
+          if (fromZip) center = fromZip
+        }
+
+        const liveAlerts = activeIncidents
+          .map(item => ({
+            name: item.Name,
+            distanceMiles: haversineMiles(center.lat, center.lng, item.Latitude, item.Longitude),
+            acres: item.AcresBurned || 0,
+            time: toRelativeTime(item.Updated),
+            contained: item.PercentContained || 0,
+            active: item.IsActive,
+          }))
+          .sort((a, b) => a.distanceMiles - b.distanceMiles)
+          .slice(0, 50)
+        setAlerts(liveAlerts)
+
+        const risk = computeRiskScore(activeIncidents, center)
+        const riskStyle =
+          risk.level === 'Extreme'
+            ? { bg: 'bg-red-50 border-red-200', color: 'text-red-600' }
+            : risk.level === 'High'
+              ? { bg: 'bg-orange-50 border-orange-200', color: 'text-orange-600' }
+              : risk.level === 'Moderate'
+                ? { bg: 'bg-yellow-50 border-yellow-200', color: 'text-yellow-600' }
+                : { bg: 'bg-green-50 border-green-200', color: 'text-green-600' }
+        setRiskData({
+          level: risk.level,
+          score: risk.score,
+          bg: riskStyle.bg,
+          color: riskStyle.color,
+        })
+        if (profile?.address_line1 && profile?.city && profile?.state) {
+          setMonitoringLabel(`Monitoring near ${profile.address_line1}, ${profile.city}`)
+        } else {
+          setMonitoringLabel('Monitoring California incidents')
+        }
       } catch (err) {
         console.error('Auth check error:', err)
         router.push('/login')
@@ -142,6 +194,14 @@ export default function DashboardPage() {
       console.error('Logout error:', err)
     }
   }
+
+  const nearestAlert = alerts.length > 0 ? alerts[0] : null
+  const riskFactors: Array<[string, string]> = [
+    ['Fuel Load', riskData.score >= 70 ? 'High' : riskData.score >= 40 ? 'Moderate' : 'Low'],
+    ['Wind Risk', nearestAlert && nearestAlert.contained < 30 ? 'High' : 'Moderate'],
+    ['Access', nearestAlert && nearestAlert.distanceMiles < 15 ? 'Limited' : 'Good'],
+    ['Defensible Space', riskData.score >= 70 ? 'Needs Work' : 'Fair'],
+  ]
 
   if (loading) return (
     <div className="min-h-screen bg-[#f8f7f5] flex items-center justify-center">
@@ -226,10 +286,10 @@ export default function DashboardPage() {
             </div>
             <div className="px-5 py-2.5 bg-orange-50 border-b border-orange-100 flex items-center gap-2 flex-shrink-0">
               <MapPin size={13} className="text-orange-400" />
-              <span className="text-orange-600 text-xs truncate font-medium">Monitoring within {alertRadius} miles</span>
+              <span className="text-orange-600 text-xs truncate font-medium">{monitoringLabel} · within {alertRadius} miles</span>
             </div>
             <div className="divide-y divide-gray-100 flex-1 overflow-y-auto">
-              {mockAlerts.filter(a => parseFloat(a.distance) <= alertRadius).map((alert, i) => (
+              {alerts.filter(a => a.distanceMiles <= alertRadius).map((alert, i) => (
                 <div key={i} className="px-5 py-4 flex items-start justify-between gap-4">
                   <div className="flex items-start gap-3">
                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${alert.active ? 'bg-red-50 border border-red-200' : 'bg-gray-100'}`}>
@@ -240,7 +300,7 @@ export default function DashboardPage() {
                         <p className="text-gray-900 text-sm font-medium">{alert.name}</p>
                         {alert.active && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />}
                       </div>
-                      <p className="text-gray-500 text-xs">{alert.distance} away · {alert.acres.toLocaleString()} acres</p>
+                      <p className="text-gray-500 text-xs">{alert.distanceMiles.toFixed(1)} mi away · {alert.acres.toLocaleString()} acres</p>
                       <p className="text-gray-400 text-xs">{alert.time}</p>
                     </div>
                   </div>
@@ -250,7 +310,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
               ))}
-              {mockAlerts.filter(a => parseFloat(a.distance) <= alertRadius).length === 0 && (
+              {alerts.filter(a => a.distanceMiles <= alertRadius).length === 0 && (
                 <div className="px-5 py-10 text-center">
                   <CheckCircle size={28} className="text-green-400 mx-auto mb-2" />
                   <p className="text-gray-900 text-sm font-medium">No active fires within {alertRadius} miles</p>
@@ -381,7 +441,7 @@ export default function DashboardPage() {
         <div className="bg-white border border-gray-200 rounded-2xl p-5 mb-5 card-hover shadow-sm">
           <div className="flex items-center gap-2 mb-4">
             <AlertTriangle size={16} className="text-orange-400" />
-            <h3 className="text-gray-900 font-bold">Fire Risk Level — ZIP 90265</h3>
+            <h3 className="text-gray-900 font-bold">Live Fire Risk Level</h3>
           </div>
           <div className="grid md:grid-cols-2 gap-5">
             <div>
@@ -397,7 +457,7 @@ export default function DashboardPage() {
               <p className="text-gray-600 text-xs leading-relaxed">Based on proximity to wildland-urban interface, historical fire frequency, fuel load, and current wind conditions.</p>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              {[['Fuel Load','High'],['Wind Risk','Moderate'],['Access','Good'],['Defensible Space','Fair']].map(([k,v]) => (
+              {riskFactors.map(([k, v]) => (
                 <div key={k} className="bg-gray-50 rounded-lg p-3">
                   <p className="text-gray-500 text-xs">{k}</p>
                   <p className="text-gray-900 text-sm font-medium">{v}</p>
