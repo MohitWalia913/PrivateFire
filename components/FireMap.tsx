@@ -167,15 +167,18 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
   const [sidebarTab, setSidebarTab] = useState<'fires' | 'layers'>('fires')
   const [selected, setSelected] = useState<FireIncident | null>(null)
   const [apiSource, setApiSource] = useState<'live' | 'demo'>('demo')
+  const [activeOnly, setActiveOnly] = useState(false)
   const [activeLayers, setActiveLayers] = useState<Record<string, boolean>>(buildInitialLayers)
   const [showLayerDropdown, setShowLayerDropdown] = useState(false)
 
+  const visibleIncidents = activeOnly ? incidents.filter(i => i.IsActive) : incidents
+
   // Stats
-  const totalAcres = incidents.reduce((s, f) => s + (f.AcresBurned || 0), 0)
-  const avgContained = incidents.length
-    ? Math.round(incidents.reduce((s, f) => s + (f.PercentContained || 0), 0) / incidents.length)
+  const totalAcres = visibleIncidents.reduce((s, f) => s + (f.AcresBurned || 0), 0)
+  const avgContained = visibleIncidents.length
+    ? Math.round(visibleIncidents.reduce((s, f) => s + (f.PercentContained || 0), 0) / visibleIncidents.length)
     : 0
-  const critical = incidents.filter(f => (f.PercentContained || 0) < 25).length
+  const critical = visibleIncidents.filter(f => (f.PercentContained || 0) < 25).length
   const activeLayerCount = [
     activeLayers.activeFires,
     activeLayers.heatmap,
@@ -187,8 +190,8 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
   const fetchIncidents = useCallback(async () => {
     setLoading(true)
     try {
-      const parsed = await fetchCalFireGeoJson(false)
-      setIncidents(parsed.filter(item => item.IsActive))
+      const parsed = await fetchCalFireGeoJson(true)
+      setIncidents(parsed)
       setApiSource('live')
     } catch {
       setIncidents([])
@@ -300,7 +303,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
   // ── EFFECT 2: Add/remove incident markers ──────────────────────────────
 
   useEffect(() => {
-    if (!mapObjRef.current || incidents.length === 0) return
+    if (!mapObjRef.current) return
     const { map, L } = mapObjRef.current as {
       map: {
         flyTo: (c: [number, number], z: number, o: object) => void
@@ -323,9 +326,11 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
       if (layer._latlng) map.removeLayer(layer)
     })
 
+    if (visibleIncidents.length === 0) return
+
     if (!activeLayers.activeFires) return
 
-    incidents.forEach(inc => {
+    visibleIncidents.forEach(inc => {
       if (!inc.Latitude || !inc.Longitude) return
       const c = inc.PercentContained || 0
       const color = c === 0 ? '#dc2626' : c < 25 ? '#ef4444' : c < 75 ? '#f97316' : '#22c55e'
@@ -356,7 +361,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
       )
       marker.addTo(map)
     })
-  }, [incidents, compact, activeLayers.activeFires])
+  }, [visibleIncidents, compact, activeLayers.activeFires])
 
   // ── EFFECT 3: Toggle heatmap ───────────────────────────────────────────
 
@@ -376,7 +381,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
 
   useEffect(() => {
     if (!heatLayerRef.current) return
-    const heatPoints = incidents
+    const heatPoints = visibleIncidents
       .filter(item => Number(item.Latitude) && Number(item.Longitude))
       .map(item => [
         item.Latitude,
@@ -385,7 +390,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
       ] as [number, number, number])
     // @ts-ignore leaflet.heat runtime method
     if (typeof heatLayerRef.current.setLatLngs === 'function') heatLayerRef.current.setLatLngs(heatPoints)
-  }, [incidents])
+  }, [visibleIncidents])
 
   // ── Toggle handler ────────────────────────────────────────────────────
 
@@ -438,7 +443,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
               {/* Tabs */}
               <div className="flex border-b border-gray-200 flex-shrink-0">
                 {[
-                  { id: 'fires', label: `Fires (${incidents.length})` },
+                  { id: 'fires', label: `Fires (${visibleIncidents.length})` },
                   { id: 'layers', label: `Layers (${activeLayerCount})` },
                 ].map(tab => (
                   <button key={tab.id}
@@ -459,7 +464,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
                   {/* Stats */}
                   <div className="grid grid-cols-2 gap-2 p-3 border-b border-gray-100 flex-shrink-0">
                     {[
-                      { label: 'Active Fires', value: incidents.length, color: 'text-red-600' },
+                      { label: activeOnly ? 'Active Fires' : 'Visible Fires', value: visibleIncidents.length, color: 'text-red-600' },
                       { label: 'Total Acres', value: totalAcres >= 1000 ? `${(totalAcres / 1000).toFixed(1)}K` : totalAcres, color: 'text-orange-500' },
                       { label: 'Avg Contained', value: `${avgContained}%`, color: avgContained > 50 ? 'text-green-600' : 'text-yellow-600' },
                       { label: 'Critical (<25%)', value: critical, color: 'text-red-700' },
@@ -512,7 +517,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
                     <p className="px-4 py-2 text-xs text-gray-400 font-medium uppercase tracking-wide">
                       Click fire to zoom in
                     </p>
-                    {incidents.map((fire, i) => {
+                    {visibleIncidents.map((fire, i) => {
                       const c = fire.PercentContained || 0
                       return (
                         <button key={i}
@@ -626,7 +631,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
         {/* Fire count badge */}
         <div className="flex items-center gap-2 bg-white/95 backdrop-blur-sm rounded-lg px-3 py-2 border border-gray-200 shadow-sm">
           <Flame size={14} className="text-orange-500" />
-          <span className="text-gray-900 font-bold text-xs">{incidents.length} Fires</span>
+          <span className="text-gray-900 font-bold text-xs">{visibleIncidents.length} Fires</span>
           {!compact && <span className="text-gray-500 text-xs hidden sm:inline">· {totalAcres.toLocaleString()} ac</span>}
           {apiSource === 'demo' && (
             <span className="bg-yellow-50 text-yellow-700 text-xs px-1.5 rounded border border-yellow-200">Demo</span>
@@ -712,13 +717,25 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
           className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs font-medium border bg-white/95 border-gray-200 text-gray-500 hover:text-orange-500 backdrop-blur-sm transition-all shadow-sm">
           <RefreshCw size={12} />
         </button>
+
+        {/* Active filter */}
+        <button
+          onClick={() => setActiveOnly(v => !v)}
+          className={`px-2.5 py-2 rounded-lg text-xs font-medium border backdrop-blur-sm transition-all shadow-sm ${
+            activeOnly
+              ? 'bg-orange-50 border-orange-300 text-orange-600'
+              : 'bg-white/95 border-gray-200 text-gray-600 hover:border-orange-300'
+          }`}
+        >
+          {activeOnly ? 'Active Only' : 'All Incidents'}
+        </button>
       </div>
 
       {/* ── Compact stats bar ── */}
-      {compact && incidents.length > 0 && (
+      {compact && visibleIncidents.length > 0 && (
         <div className="absolute top-4 left-4 z-20 flex items-center gap-2 flex-wrap">
           {[
-            { label: 'Active Fires', value: incidents.length, color: 'text-red-600' },
+            { label: activeOnly ? 'Active Fires' : 'Visible Fires', value: visibleIncidents.length, color: 'text-red-600' },
             { label: 'Acres', value: totalAcres >= 1000 ? `${(totalAcres / 1000).toFixed(1)}K` : totalAcres.toLocaleString(), color: 'text-orange-500' },
             { label: 'Avg Cont.', value: `${avgContained}%`, color: avgContained > 50 ? 'text-green-600' : 'text-yellow-600' },
           ].map(s => (
