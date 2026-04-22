@@ -35,8 +35,9 @@ type GeoJsonResponse = {
   features: GeoJsonFeature[]
 }
 
-const LIST_URL = 'https://incidents.fire.ca.gov/umbraco/api/IncidentApi/List'
-const GEOJSON_URL = 'https://incidents.fire.ca.gov/umbraco/api/IncidentApi/GeoJsonList'
+const LIST_URL = '/api/calfire/list'
+const GEOJSON_URL = '/api/calfire/geojson'
+export const CALFIRE_REFRESH_MS = 5 * 60 * 1000
 
 export async function fetchCalFireList(inactive = true): Promise<CalFireIncident[]> {
   const res = await fetch(`${LIST_URL}?inactive=${inactive}`, { cache: 'no-store' })

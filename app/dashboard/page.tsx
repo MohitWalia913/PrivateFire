@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { Flame, Shield, Phone, MapPin, Bell, AlertTriangle, CheckCircle, Clock, TrendingUp, LogOut, User, ChevronRight, Zap, Home, FileText, Plus } from 'lucide-react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
-import { computeRiskScore, fetchCalFireList, haversineMiles, toRelativeTime, type CalFireIncident } from '@/lib/calfire'
+import { CALFIRE_REFRESH_MS, computeRiskScore, fetchCalFireList, haversineMiles, toRelativeTime } from '@/lib/calfire'
 import { geocodeAddress, geocodeZip } from '@/lib/geocode'
 import { getAlertSettings, getCoverageApplication, getUserProfile } from '@/lib/supabase/user-data'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
@@ -107,54 +107,9 @@ export default function DashboardPage() {
           setCoverageStatus('not_covered')
         }
 
-        const incidents = await fetchCalFireList(true)
-        const activeIncidents = incidents.filter(item => item.IsActive)
-
-        let center: { lat: number; lng: number } = { lat: 37.5, lng: -119.5 }
-        if (profile?.address_line1 && profile?.city && profile?.state) {
-          const fromAddress = await geocodeAddress(`${profile.address_line1}, ${profile.city}, ${profile.state} ${profile.zip_code || ''}`)
-          if (fromAddress) center = fromAddress
-        } else if (profile?.zip_code) {
-          const fromZip = await geocodeZip(profile.zip_code)
-          if (fromZip) center = fromZip
-        }
-
-        const liveAlerts = activeIncidents
-          .map(item => ({
-            name: item.Name,
-            distanceMiles: haversineMiles(center.lat, center.lng, item.Latitude, item.Longitude),
-            acres: item.AcresBurned || 0,
-            time: toRelativeTime(item.Updated),
-            contained: item.PercentContained || 0,
-            active: item.IsActive,
-          }))
-          .sort((a, b) => a.distanceMiles - b.distanceMiles)
-          .slice(0, 50)
-        setAlerts(liveAlerts)
-
-        const risk = computeRiskScore(activeIncidents, center)
-        const riskStyle =
-          risk.level === 'Extreme'
-            ? { bg: 'bg-red-50 border-red-200', color: 'text-red-600' }
-            : risk.level === 'High'
-              ? { bg: 'bg-orange-50 border-orange-200', color: 'text-orange-600' }
-              : risk.level === 'Moderate'
-                ? { bg: 'bg-yellow-50 border-yellow-200', color: 'text-yellow-600' }
-                : { bg: 'bg-green-50 border-green-200', color: 'text-green-600' }
-        setRiskData({
-          level: risk.level,
-          score: risk.score,
-          bg: riskStyle.bg,
-          color: riskStyle.color,
-        })
-        if (profile?.address_line1 && profile?.city && profile?.state) {
-          setMonitoringLabel(`Monitoring near ${profile.address_line1}, ${profile.city}`)
-        } else {
-          setMonitoringLabel('Monitoring California incidents')
-        }
       } catch (err) {
-        console.error('Auth check error:', err)
-        router.push('/login')
+        // Non-auth data errors should not force logout/redirect loops.
+        console.error('Dashboard initialization error:', err)
       } finally {
         setLoading(false)
       }
@@ -184,6 +139,80 @@ export default function DashboardPage() {
   }
 
   const [addresses, setAddresses] = useState<{ label: string; address: string; city: string; state: string; zip: string }[]>([])
+
+  useEffect(() => {
+    if (!user) return
+
+    let cancelled = false
+
+    const loadFireData = async () => {
+      try {
+        const incidents = await fetchCalFireList(true)
+        const activeIncidents = incidents.filter(item => item.IsActive)
+
+        let center: { lat: number; lng: number } = { lat: 37.5, lng: -119.5 }
+        const primaryAddress = addresses[0]
+        if (primaryAddress?.address && primaryAddress?.city && primaryAddress?.state) {
+          const fromAddress = await geocodeAddress(`${primaryAddress.address}, ${primaryAddress.city}, ${primaryAddress.state} ${primaryAddress.zip || ''}`)
+          if (fromAddress) center = fromAddress
+        } else if (primaryAddress?.zip) {
+          const fromZip = await geocodeZip(primaryAddress.zip)
+          if (fromZip) center = fromZip
+        }
+
+        if (cancelled) return
+
+        const liveAlerts = activeIncidents
+          .map(item => ({
+            name: item.Name,
+            distanceMiles: haversineMiles(center.lat, center.lng, item.Latitude, item.Longitude),
+            acres: item.AcresBurned || 0,
+            time: toRelativeTime(item.Updated),
+            contained: item.PercentContained || 0,
+            active: item.IsActive,
+          }))
+          .sort((a, b) => a.distanceMiles - b.distanceMiles)
+          .slice(0, 50)
+        setAlerts(liveAlerts)
+
+        const risk = computeRiskScore(activeIncidents, center)
+        const riskStyle =
+          risk.level === 'Extreme'
+            ? { bg: 'bg-red-50 border-red-200', color: 'text-red-600' }
+            : risk.level === 'High'
+              ? { bg: 'bg-orange-50 border-orange-200', color: 'text-orange-600' }
+              : risk.level === 'Moderate'
+                ? { bg: 'bg-yellow-50 border-yellow-200', color: 'text-yellow-600' }
+                : { bg: 'bg-green-50 border-green-200', color: 'text-green-600' }
+        setRiskData({
+          level: risk.level,
+          score: risk.score,
+          bg: riskStyle.bg,
+          color: riskStyle.color,
+        })
+        if (primaryAddress?.address && primaryAddress?.city) {
+          setMonitoringLabel(`Monitoring near ${primaryAddress.address}, ${primaryAddress.city}`)
+        } else {
+          setMonitoringLabel('Monitoring California incidents')
+        }
+      } catch {
+        if (!cancelled) {
+          setAlerts([])
+          setMonitoringLabel('Monitoring California incidents')
+        }
+      }
+    }
+
+    void loadFireData()
+    const timer = setInterval(() => {
+      void loadFireData()
+    }, CALFIRE_REFRESH_MS)
+
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [user, addresses])
 
   const logout = async () => {
     try {

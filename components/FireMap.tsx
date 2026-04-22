@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { fetchCalFireGeoJson, type CalFireIncident } from '@/lib/calfire'
+import { CALFIRE_REFRESH_MS, fetchCalFireGeoJson, type CalFireIncident } from '@/lib/calfire'
 import ContactModal from './ContactModal'
 import {
   Flame, AlertTriangle, RefreshCw, ChevronLeft, ChevronRight,
@@ -198,7 +198,13 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
     setLoading(false)
   }, [])
 
-  useEffect(() => { fetchIncidents() }, [fetchIncidents])
+  useEffect(() => {
+    void fetchIncidents()
+    const timer = setInterval(() => {
+      void fetchIncidents()
+    }, CALFIRE_REFRESH_MS)
+    return () => clearInterval(timer)
+  }, [fetchIncidents])
 
   // ── EFFECT 1: Init map + create all WMS layers ─────────────────────────
 
@@ -260,15 +266,8 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
       try {
         await import('leaflet.heat')
         if (!cancelled) {
-          const heatPoints = incidents
-            .filter(item => Number(item.Latitude) && Number(item.Longitude))
-            .map(item => [
-              item.Latitude,
-              item.Longitude,
-              Math.min(1, ((item.AcresBurned || 0) / 5000) + ((100 - (item.PercentContained || 0)) / 100) * 0.5),
-            ] as [number, number, number])
           // @ts-ignore leaflet.heat
-          const heatLayer = L.heatLayer(heatPoints, {
+          const heatLayer = L.heatLayer([], {
             radius: compact ? 28 : 40,
             blur: 25,
             maxZoom: 10,
@@ -296,7 +295,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compact, incidents])
+  }, [compact])
 
   // ── EFFECT 2: Add/remove incident markers ──────────────────────────────
 
@@ -372,6 +371,21 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
       map.removeLayer(heatLayerRef.current)
     }
   }, [activeLayers.heatmap])
+
+  // ── EFFECT 4: Refresh heatmap data from incidents ─────────────────────
+
+  useEffect(() => {
+    if (!heatLayerRef.current) return
+    const heatPoints = incidents
+      .filter(item => Number(item.Latitude) && Number(item.Longitude))
+      .map(item => [
+        item.Latitude,
+        item.Longitude,
+        Math.min(1, ((item.AcresBurned || 0) / 5000) + ((100 - (item.PercentContained || 0)) / 100) * 0.5),
+      ] as [number, number, number])
+    // @ts-ignore leaflet.heat runtime method
+    if (typeof heatLayerRef.current.setLatLngs === 'function') heatLayerRef.current.setLatLngs(heatPoints)
+  }, [incidents])
 
   // ── Toggle handler ────────────────────────────────────────────────────
 
