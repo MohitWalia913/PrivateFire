@@ -93,6 +93,7 @@ export default function ApplyPage() {
         has_insurance: form.currentInsurance,
         additional_info: form.notes.trim() || null,
         submitted: true,
+        submitted_at: new Date().toISOString(),
       })
 
       await upsertUserProfile(supabase, {

@@ -24,6 +24,10 @@ export default function DashboardPage() {
   const [profilePhone, setProfilePhone] = useState('')
   const [hasSubmittedApplication, setHasSubmittedApplication] = useState(false)
   const [isApplicationApproved, setIsApplicationApproved] = useState(false)
+  const [accountCreatedAt, setAccountCreatedAt] = useState<string | null>(null)
+  const [applicationSubmittedAt, setApplicationSubmittedAt] = useState<string | null>(null)
+  const [assessmentScheduledAt, setAssessmentScheduledAt] = useState<string | null>(null)
+  const [coverageActiveAt, setCoverageActiveAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [alertRadius, setAlertRadius] = useState(25)
   const [alerts, setAlerts] = useState<Array<{
@@ -54,6 +58,7 @@ export default function DashboardPage() {
         }
 
         setUser(session.user)
+        setAccountCreatedAt(session.user.created_at || null)
         const [profile, settings, application] = await Promise.all([
           getUserProfile(supabase, session.user.id),
           getAlertSettings(supabase, session.user.id),
@@ -93,18 +98,30 @@ export default function DashboardPage() {
           setHasSubmittedApplication(true)
           setIsApplicationApproved(true)
           setCoverageStatus('active')
+          setApplicationSubmittedAt(application.submitted_at || null)
+          setAssessmentScheduledAt(application.assessment_scheduled_at || null)
+          setCoverageActiveAt(application.approved_at || null)
         } else if (application?.submitted) {
           setHasSubmittedApplication(true)
           setIsApplicationApproved(false)
           setCoverageStatus('pending')
+          setApplicationSubmittedAt(application.submitted_at || null)
+          setAssessmentScheduledAt(application.assessment_scheduled_at || null)
+          setCoverageActiveAt(null)
         } else if (profile) {
           setHasSubmittedApplication(false)
           setIsApplicationApproved(false)
           setCoverageStatus(profile.coverage_status)
+          setApplicationSubmittedAt(null)
+          setAssessmentScheduledAt(null)
+          setCoverageActiveAt(null)
         } else {
           setHasSubmittedApplication(false)
           setIsApplicationApproved(false)
           setCoverageStatus('not_covered')
+          setApplicationSubmittedAt(null)
+          setAssessmentScheduledAt(null)
+          setCoverageActiveAt(null)
         }
 
       } catch (err) {
@@ -225,6 +242,12 @@ export default function DashboardPage() {
   }
 
   const nearestAlert = alerts.length > 0 ? alerts[0] : null
+  const formatTimelineDate = (value: string | null) => {
+    if (!value) return ''
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) return ''
+    return d.toLocaleDateString()
+  }
   const riskFactors: Array<[string, string]> = [
     ['Fuel Load', riskData.score >= 70 ? 'High' : riskData.score >= 40 ? 'Moderate' : 'Low'],
     ['Wind Risk', nearestAlert && nearestAlert.contained < 30 ? 'High' : 'Moderate'],
@@ -505,10 +528,38 @@ export default function DashboardPage() {
               </h3>
               <div className="space-y-3">
                 {[
-                  { icon: CheckCircle, label: 'Account Created', detail: 'Complete', done: true },
-                  { icon: FileText, label: 'Application Submitted', detail: hasSubmittedApplication ? 'Submitted' : 'Not yet submitted', done: hasSubmittedApplication },
-                  { icon: Zap, label: 'Property Assessment', detail: isApplicationApproved ? 'Assessment in progress' : 'Scheduled after approval', done: isApplicationApproved },
-                  { icon: Shield, label: 'Protection Active', detail: isApplicationApproved ? 'Coverage active' : 'Pending approval', done: isApplicationApproved },
+                  {
+                    icon: CheckCircle,
+                    label: 'Account Created',
+                    detail: accountCreatedAt ? `Created ${formatTimelineDate(accountCreatedAt)}` : 'Complete',
+                    done: true,
+                  },
+                  {
+                    icon: FileText,
+                    label: 'Application Submitted',
+                    detail: hasSubmittedApplication
+                      ? `Submitted ${formatTimelineDate(applicationSubmittedAt) || 'recently'}`
+                      : 'Not yet submitted',
+                    done: hasSubmittedApplication,
+                  },
+                  {
+                    icon: Zap,
+                    label: 'Property Assessment',
+                    detail: assessmentScheduledAt
+                      ? `Scheduled ${formatTimelineDate(assessmentScheduledAt)}`
+                      : hasSubmittedApplication
+                        ? 'Pending scheduling'
+                        : 'Scheduled after approval',
+                    done: Boolean(assessmentScheduledAt),
+                  },
+                  {
+                    icon: Shield,
+                    label: 'Protection Active',
+                    detail: isApplicationApproved
+                      ? `Coverage active ${formatTimelineDate(coverageActiveAt) || ''}`.trim()
+                      : 'Pending approval',
+                    done: isApplicationApproved,
+                  },
                 ].map((item, i) => (
                   <div key={i} className="flex items-start gap-3">
                     <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${item.done ? 'bg-orange-50 border border-orange-200' : 'bg-gray-100 border border-gray-200'}`}>

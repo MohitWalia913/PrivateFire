@@ -146,6 +146,7 @@ export default function MyApplicationPage() {
         has_insurance: form.hasInsurance,
         additional_info: form.additionalInfo.trim() || null,
         submitted: true,
+        submitted_at: new Date().toISOString(),
       })
 
       await upsertUserProfile(supabase, {

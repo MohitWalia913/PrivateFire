@@ -42,9 +42,16 @@ create table if not exists public.coverage_applications (
   additional_info text,
   submitted boolean not null default false,
   approved boolean not null default false,
+  submitted_at timestamptz,
+  assessment_scheduled_at timestamptz,
+  approved_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.coverage_applications add column if not exists submitted_at timestamptz;
+alter table public.coverage_applications add column if not exists assessment_scheduled_at timestamptz;
+alter table public.coverage_applications add column if not exists approved_at timestamptz;
 
 create or replace function public.set_updated_at()
 returns trigger

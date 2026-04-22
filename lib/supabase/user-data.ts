@@ -40,6 +40,9 @@ export type CoverageApplicationRow = {
   additional_info: string | null
   submitted: boolean
   approved: boolean
+  submitted_at: string | null
+  assessment_scheduled_at: string | null
+  approved_at: string | null
 }
 
 export async function getUserProfile(
@@ -92,7 +95,7 @@ export async function getCoverageApplication(
 ): Promise<CoverageApplicationRow | null> {
   const { data, error } = await supabase
     .from('coverage_applications')
-    .select('user_id, first_name, last_name, email, phone, address, city, state, zip, property_type, home_value, has_insurance, additional_info, submitted, approved')
+    .select('user_id, first_name, last_name, email, phone, address, city, state, zip, property_type, home_value, has_insurance, additional_info, submitted, approved, submitted_at, assessment_scheduled_at, approved_at')
     .eq('user_id', userId)
     .maybeSingle()
 
