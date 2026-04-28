@@ -59,6 +59,12 @@ export default function DashboardPage() {
 
         setUser(session.user)
         setAccountCreatedAt(session.user.created_at || null)
+        const metadataFirst = session.user.user_metadata?.first_name || ''
+        const metadataLast = session.user.user_metadata?.last_name || ''
+        const metadataName = `${metadataFirst} ${metadataLast}`.trim()
+        const metadataPhone = session.user.user_metadata?.phone || ''
+        setProfileName(metadataName)
+        setProfilePhone(metadataPhone)
         const [profile, settings, application] = await Promise.all([
           getUserProfile(supabase, session.user.id),
           getAlertSettings(supabase, session.user.id),
@@ -69,9 +75,9 @@ export default function DashboardPage() {
           setProfileName(
             profile.first_name && profile.last_name
               ? `${profile.first_name} ${profile.last_name}`
-              : profile.first_name || session.user.email?.split('@')[0] || 'User',
+              : profile.first_name || metadataName,
           )
-          setProfilePhone(profile.phone || '')
+          setProfilePhone(profile.phone || metadataPhone)
           if (profile.address_line1 && profile.city && profile.state && profile.zip_code) {
             setAddresses([{
               label: 'Primary Property',
@@ -84,11 +90,8 @@ export default function DashboardPage() {
             setAddresses([])
           }
         } else {
-          const metadataFirst = session.user.user_metadata?.first_name || ''
-          const metadataLast = session.user.user_metadata?.last_name || ''
-          const metadataName = `${metadataFirst} ${metadataLast}`.trim()
           setProfileName(metadataName)
-          setProfilePhone('')
+          setProfilePhone(metadataPhone)
           setCoverageStatus('not_covered')
           setAddresses([])
         }

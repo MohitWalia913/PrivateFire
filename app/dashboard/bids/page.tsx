@@ -149,17 +149,23 @@ export default function MyApplicationPage() {
         submitted_at: new Date().toISOString(),
       })
 
-      await upsertUserProfile(supabase, {
-        user_id: user.id,
-        first_name: form.firstName.trim() || null,
-        last_name: form.lastName.trim() || null,
-        phone: form.phone.trim() || null,
-        address_line1: form.address.trim() || null,
-        city: form.city.trim() || null,
-        state: form.state.trim().toUpperCase() || null,
-        zip_code: form.zip.trim() || null,
-        coverage_status: 'pending',
-      })
+      // Keep application flow successful even if profile mirror fails.
+      // This avoids blocking users when optional profile tables are out-of-sync.
+      try {
+        await upsertUserProfile(supabase, {
+          user_id: user.id,
+          first_name: form.firstName.trim() || null,
+          last_name: form.lastName.trim() || null,
+          phone: form.phone.trim() || null,
+          address_line1: form.address.trim() || null,
+          city: form.city.trim() || null,
+          state: form.state.trim().toUpperCase() || null,
+          zip_code: form.zip.trim() || null,
+          coverage_status: 'pending',
+        })
+      } catch (profileErr) {
+        console.error('Profile sync warning after application submit:', profileErr)
+      }
 
       setSubmitted(true)
       setApplicationStatus('pending')

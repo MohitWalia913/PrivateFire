@@ -45,6 +45,11 @@ export default function Navbar() {
     return null
   }
 
+  const useMinimalTopbar =
+    pathname === '/dashboard' ||
+    pathname.startsWith('/dashboard/') ||
+    pathname === '/map'
+
   const handleLogout = async () => {
     try {
       const supabase = getSupabaseBrowserClient()
@@ -63,6 +68,35 @@ export default function Navbar() {
     { href: '/#about', label: 'About Us' },
     { href: '/contact', label: 'Contact' },
   ]
+
+  if (useMinimalTopbar) {
+    return (
+      <nav className={`fixed top-0 w-full z-50 transition-all duration-300 ${
+        scrolled
+          ? 'bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm'
+          : 'bg-white/80 backdrop-blur-sm border-b border-gray-100'
+      }`}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <Link href="/" className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-orange-500 flex items-center justify-center">
+                <Flame size={18} className="text-white" />
+              </div>
+              <span className="font-black text-gray-900 text-lg tracking-tight">
+                PRIVATE <span className="text-orange-500">FIRE</span>
+              </span>
+            </Link>
+            <a
+              href="https://privatefire.com"
+              className="bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2 rounded-full transition-all"
+            >
+              Back to site
+            </a>
+          </div>
+        </div>
+      </nav>
+    )
+  }
 
   return (
     <nav className={`fixed top-0 w-full z-50 transition-all duration-300 ${
