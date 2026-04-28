@@ -84,8 +84,8 @@ export default function MyApplicationPage() {
           setIsEditing(true)
         }
       } catch (err) {
-        console.error('Auth check error:', err)
-        router.push('/login')
+        // Avoid redirecting authenticated users for non-auth data errors.
+        console.error('Application initialization error:', err)
       } finally {
         setLoading(false)
       }

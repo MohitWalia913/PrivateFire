@@ -84,7 +84,10 @@ export default function DashboardPage() {
             setAddresses([])
           }
         } else {
-          setProfileName(session.user.user_metadata?.first_name || session.user.email?.split('@')[0] || 'User')
+          const metadataFirst = session.user.user_metadata?.first_name || ''
+          const metadataLast = session.user.user_metadata?.last_name || ''
+          const metadataName = `${metadataFirst} ${metadataLast}`.trim()
+          setProfileName(metadataName)
           setProfilePhone('')
           setCoverageStatus('not_covered')
           setAddresses([])
@@ -156,6 +159,8 @@ export default function DashboardPage() {
   }
 
   const [addresses, setAddresses] = useState<{ label: string; address: string; city: string; state: string; zip: string }[]>([])
+  const hasAddress = addresses.length > 0
+  const canShowRiskLevel = hasSubmittedApplication && Boolean(addresses[0]?.zip)
 
   useEffect(() => {
     if (!user) return
@@ -192,21 +197,30 @@ export default function DashboardPage() {
           .slice(0, 50)
         setAlerts(liveAlerts)
 
-        const risk = computeRiskScore(activeIncidents, center)
-        const riskStyle =
-          risk.level === 'Extreme'
-            ? { bg: 'bg-red-50 border-red-200', color: 'text-red-600' }
-            : risk.level === 'High'
-              ? { bg: 'bg-orange-50 border-orange-200', color: 'text-orange-600' }
-              : risk.level === 'Moderate'
-                ? { bg: 'bg-yellow-50 border-yellow-200', color: 'text-yellow-600' }
-                : { bg: 'bg-green-50 border-green-200', color: 'text-green-600' }
-        setRiskData({
-          level: risk.level,
-          score: risk.score,
-          bg: riskStyle.bg,
-          color: riskStyle.color,
-        })
+        if (hasSubmittedApplication && primaryAddress?.zip) {
+          const risk = computeRiskScore(activeIncidents, center)
+          const riskStyle =
+            risk.level === 'Extreme'
+              ? { bg: 'bg-red-50 border-red-200', color: 'text-red-600' }
+              : risk.level === 'High'
+                ? { bg: 'bg-orange-50 border-orange-200', color: 'text-orange-600' }
+                : risk.level === 'Moderate'
+                  ? { bg: 'bg-yellow-50 border-yellow-200', color: 'text-yellow-600' }
+                  : { bg: 'bg-green-50 border-green-200', color: 'text-green-600' }
+          setRiskData({
+            level: risk.level,
+            score: risk.score,
+            bg: riskStyle.bg,
+            color: riskStyle.color,
+          })
+        } else {
+          setRiskData({
+            level: '',
+            score: 0,
+            bg: 'bg-gray-50 border-gray-200',
+            color: 'text-gray-500',
+          })
+        }
         if (primaryAddress?.address && primaryAddress?.city) {
           setMonitoringLabel(`Monitoring near ${primaryAddress.address}, ${primaryAddress.city}`)
         } else {
@@ -229,7 +243,7 @@ export default function DashboardPage() {
       cancelled = true
       clearInterval(timer)
     }
-  }, [user, addresses])
+  }, [user, addresses, hasSubmittedApplication])
 
   const logout = async () => {
     try {
@@ -248,12 +262,19 @@ export default function DashboardPage() {
     if (Number.isNaN(d.getTime())) return ''
     return d.toLocaleDateString()
   }
-  const riskFactors: Array<[string, string]> = [
-    ['Fuel Load', riskData.score >= 70 ? 'High' : riskData.score >= 40 ? 'Moderate' : 'Low'],
-    ['Wind Risk', nearestAlert && nearestAlert.contained < 30 ? 'High' : 'Moderate'],
-    ['Access', nearestAlert && nearestAlert.distanceMiles < 15 ? 'Limited' : 'Good'],
-    ['Defensible Space', riskData.score >= 70 ? 'Needs Work' : 'Fair'],
-  ]
+  const riskFactors: Array<[string, string]> = canShowRiskLevel
+    ? [
+      ['Fuel Load', riskData.score >= 70 ? 'High' : riskData.score >= 40 ? 'Moderate' : 'Low'],
+      ['Wind Risk', nearestAlert && nearestAlert.contained < 30 ? 'High' : 'Moderate'],
+      ['Access', nearestAlert && nearestAlert.distanceMiles < 15 ? 'Limited' : 'Good'],
+      ['Defensible Space', riskData.score >= 70 ? 'Needs Work' : 'Fair'],
+    ]
+    : [
+      ['Fuel Load', '—'],
+      ['Wind Risk', '—'],
+      ['Access', '—'],
+      ['Defensible Space', '—'],
+    ]
 
   if (loading) return (
     <div className="min-h-screen bg-[#f8f7f5] flex items-center justify-center">
@@ -394,7 +415,7 @@ export default function DashboardPage() {
               <div>
                 <p className="text-gray-500 text-xs">Full Name</p>
                 <p className="text-gray-900 text-sm font-medium">
-                  {profileName || user?.email?.split('@')[0] || 'User'}
+                  {profileName || 'Not added yet'}
                 </p>
               </div>
               <div>
@@ -470,11 +491,18 @@ export default function DashboardPage() {
               <h3 className="text-gray-900 font-bold">Emergency Contact</h3>
             </div>
             <div className="space-y-3">
-              <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                <p className="text-gray-500 text-xs mb-0.5">Your Assigned Team</p>
-                <p className="text-gray-900 font-bold">Unit 7 — Malibu Station</p>
-                <p className="text-gray-500 text-xs mt-1">Capt. Rodriguez · 8 personnel</p>
-              </div>
+              {hasAddress && (
+                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                  <p className="text-gray-500 text-xs mb-0.5">Your Assigned Team</p>
+                  <p className="text-gray-900 font-bold">Unit 7 — Malibu Station</p>
+                  <p className="text-gray-500 text-xs mt-1">Capt. Rodriguez · 8 personnel</p>
+                </div>
+              )}
+              {!hasAddress && (
+                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                  <p className="text-gray-700 text-sm font-medium">Add your property address to assign an emergency team.</p>
+                </div>
+              )}
               <a href="tel:8184141980" className="flex items-center justify-center gap-3 bg-orange-500 hover:bg-orange-600 text-white font-bold py-3.5 rounded-full btn-glow transition-all w-full">
                 <Phone size={18} className="fire-pulse" /> Call Now: 818-414-1980
               </a>
@@ -497,16 +525,24 @@ export default function DashboardPage() {
           </div>
           <div className="grid md:grid-cols-2 gap-5">
             <div>
-              <div className={`rounded-xl border p-4 mb-4 ${riskData.bg}`}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className={`text-xl font-black ${riskData.color}`}>{riskData.level} Risk</span>
-                  <span className={`text-2xl font-black ${riskData.color}`}>{riskData.score}/100</span>
+              {canShowRiskLevel ? (
+                <>
+                  <div className={`rounded-xl border p-4 mb-4 ${riskData.bg}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`text-xl font-black ${riskData.color}`}>{riskData.level} Risk</span>
+                      <span className={`text-2xl font-black ${riskData.color}`}>{riskData.score}/100</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="bg-orange-500 h-2 rounded-full" style={{ width: `${riskData.score}%` }} />
+                    </div>
+                  </div>
+                  <p className="text-gray-600 text-xs leading-relaxed">Based on proximity to wildland-urban interface, historical fire frequency, fuel load, and current wind conditions.</p>
+                </>
+              ) : (
+                <div className="rounded-xl border p-4 mb-4 bg-gray-50 border-gray-200">
+                  <p className="text-gray-700 text-sm font-medium">Please submit your application to view your ZIP-based risk level.</p>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div className="bg-orange-500 h-2 rounded-full" style={{ width: `${riskData.score}%` }} />
-                </div>
-              </div>
-              <p className="text-gray-600 text-xs leading-relaxed">Based on proximity to wildland-urban interface, historical fire frequency, fuel load, and current wind conditions.</p>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-2">
               {riskFactors.map(([k, v]) => (

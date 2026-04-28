@@ -137,6 +137,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
   const [activeOnly, setActiveOnly] = useState(false)
   const [activeLayers, setActiveLayers] = useState<Record<string, boolean>>(buildInitialLayers)
   const [showLayerDropdown, setShowLayerDropdown] = useState(false)
+  const [isMapReady, setIsMapReady] = useState(false)
 
   const visibleIncidents = activeOnly ? incidents.filter(i => i.IsActive) : incidents
 
@@ -249,6 +250,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
       } catch { /* optional */ }
 
       if (!cancelled) mapObjRef.current = { map, L }
+      if (!cancelled) setIsMapReady(true)
     }
 
     init()
@@ -256,6 +258,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
     return () => {
       cancelled = true
       mapReadyRef.current = false
+      setIsMapReady(false)
       wmsLayerRefs.current = {}
       heatLayerRef.current = null
       if (mapObjRef.current) {
@@ -270,7 +273,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
   // ── EFFECT 2: Add/remove incident markers ──────────────────────────────
 
   useEffect(() => {
-    if (!mapObjRef.current) return
+    if (!mapObjRef.current || !isMapReady) return
     const { map, L } = mapObjRef.current as {
       map: {
         flyTo: (c: [number, number], z: number, o: object) => void
@@ -328,7 +331,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
       )
       marker.addTo(map)
     })
-  }, [visibleIncidents, compact, activeLayers.activeFires])
+  }, [visibleIncidents, compact, activeLayers.activeFires, isMapReady])
 
   // ── EFFECT 3: Toggle heatmap ───────────────────────────────────────────
 
