@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { buildAdminApplicationEmail, buildApplicantSubmittedOrUpdatedEmail } from '@/lib/email/application-templates'
 import { sendEmailWithResend } from '@/lib/email/resend'
 
 const ADMIN_EMAIL = 'laythenmartines0@gmail.com'
@@ -29,6 +30,7 @@ export async function POST(req: NextRequest) {
 
     const fullName = `${firstName} ${lastName}`.trim()
     const safeNotes = notes?.trim() || 'None provided'
+    const safeFirstName = firstName.trim() || 'there'
 
     const normalizedAction = action === 'updated' ? 'updated' : 'submitted'
     const adminSubject =
@@ -44,35 +46,22 @@ export async function POST(req: NextRequest) {
       to: ADMIN_EMAIL,
       subject: adminSubject,
       replyTo: email,
-      html: `
-        <h2>Private Fire Application ${normalizedAction === 'updated' ? 'Update' : 'Submission'}</h2>
-        <p><strong>Name:</strong> ${fullName}</p>
-        <p><strong>Email:</strong> ${email}</p>
-        <p><strong>Phone:</strong> ${phone || 'Not provided'}</p>
-        <p><strong>Address:</strong> ${address || ''}, ${city || ''}, ${state || ''} ${zip || ''}</p>
-        <p><strong>Property Type:</strong> ${propertyType || 'Not provided'}</p>
-        <p><strong>Home Value:</strong> ${homeValue || 'Not provided'}</p>
-        <p><strong>Current Fire Insurance:</strong> ${currentInsurance || 'Not provided'}</p>
-        <p><strong>Additional Notes:</strong> ${safeNotes}</p>
-      `,
+      html: buildAdminApplicationEmail(normalizedAction, {
+        fullName,
+        email,
+        phone,
+        addressLine: `${address || ''}, ${city || ''}, ${state || ''} ${zip || ''}`.trim(),
+        propertyType,
+        homeValue,
+        currentInsurance,
+        notes: safeNotes,
+      }),
     })
 
     await sendEmailWithResend({
       to: email,
       subject: userSubject,
-      html: `
-        <h2>Application ${normalizedAction === 'updated' ? 'updated' : 'received'}</h2>
-        <p>Hi ${firstName},</p>
-        <p>
-          ${
-            normalizedAction === 'updated'
-              ? 'We received your updated Private Fire application details.'
-              : 'Thanks for submitting your Private Fire application.'
-          }
-          Our team will review your details and contact you within 2-3 business days.
-        </p>
-        <p>If you need to add details, reply to this email.</p>
-      `,
+      html: buildApplicantSubmittedOrUpdatedEmail(safeFirstName, normalizedAction),
     })
 
     return NextResponse.json({ success: true })

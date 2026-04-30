@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { buildApplicantApprovedEmail } from '@/lib/email/application-templates'
 import { sendEmailWithResend } from '@/lib/email/resend'
 import { getSupabaseServerClient } from '@/lib/supabase/server'
 
@@ -58,12 +59,7 @@ export async function POST(req: NextRequest) {
       await sendEmailWithResend({
         to: app.email,
         subject: 'Your Private Fire application was approved',
-        html: `
-          <h2>Your application is approved</h2>
-          <p>Hi ${app.first_name || 'there'},</p>
-          <p>Great news - your Private Fire application has been approved and your coverage is now active.</p>
-          <p>You can log in to your dashboard to view your updated status and alert settings.</p>
-        `,
+        html: buildApplicantApprovedEmail(app.first_name || 'there'),
       })
     }
 
