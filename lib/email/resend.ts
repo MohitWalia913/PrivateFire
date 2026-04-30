@@ -7,7 +7,7 @@ type SendEmailArgs = {
   replyTo?: string
 }
 
-function getRequiredEnv(name: 'RESEND_API_KEY' | 'RESEND_FROM_EMAIL'): string {
+function getRequiredEnv(name: 'RESEND_API_KEY'): string {
   const value = process.env[name]
   if (!value) {
     throw new Error(`Missing required environment variable: ${name}`)
@@ -15,9 +15,21 @@ function getRequiredEnv(name: 'RESEND_API_KEY' | 'RESEND_FROM_EMAIL'): string {
   return value
 }
 
+function getFromEmail(): string {
+  const explicitFrom =
+    process.env.RESEND_FROM_EMAIL ||
+    process.env.RESEND_SENDER_EMAIL ||
+    process.env.SMTP_FROM_EMAIL
+
+  if (explicitFrom) return explicitFrom
+
+  // Fallback to your configured sender to avoid silent failures when env naming differs.
+  return 'nooreply@contact.privatefire.com'
+}
+
 export async function sendEmailWithResend({ to, subject, html, replyTo }: SendEmailArgs) {
   const apiKey = getRequiredEnv('RESEND_API_KEY')
-  const from = getRequiredEnv('RESEND_FROM_EMAIL')
+  const from = getFromEmail()
 
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',

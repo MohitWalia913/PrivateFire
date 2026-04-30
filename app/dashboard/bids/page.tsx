@@ -131,6 +131,8 @@ export default function MyApplicationPage() {
     setError('')
     try {
       const supabase = getSupabaseBrowserClient()
+      const wasSubmitted = submitted
+
       await upsertCoverageApplication(supabase, {
         user_id: user.id,
         first_name: form.firstName.trim(),
@@ -146,7 +148,7 @@ export default function MyApplicationPage() {
         has_insurance: form.hasInsurance,
         additional_info: form.additionalInfo.trim() || null,
         submitted: true,
-        submitted_at: new Date().toISOString(),
+        submitted_at: wasSubmitted ? undefined : new Date().toISOString(),
       })
 
       // Keep application flow successful even if profile mirror fails.
@@ -165,6 +167,30 @@ export default function MyApplicationPage() {
         })
       } catch (profileErr) {
         console.error('Profile sync warning after application submit:', profileErr)
+      }
+
+      const notifyRes = await fetch('/api/applications/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: wasSubmitted ? 'updated' : 'submitted',
+          firstName: form.firstName.trim(),
+          lastName: form.lastName.trim(),
+          email: form.email.trim(),
+          phone: form.phone.trim(),
+          address: form.address.trim(),
+          city: form.city.trim(),
+          state: form.state.trim().toUpperCase(),
+          zip: form.zip.trim(),
+          propertyType: form.propertyType,
+          homeValue: form.homeValue,
+          currentInsurance: form.hasInsurance,
+          notes: form.additionalInfo.trim(),
+        }),
+      })
+
+      if (!notifyRes.ok) {
+        console.error('Application email notify failed:', await notifyRes.text())
       }
 
       setSubmitted(true)
