@@ -200,6 +200,22 @@ export default function DashboardPage() {
           .slice(0, 50)
         setAlerts(liveAlerts)
 
+        await fetch('/api/alerts/dispatch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id,
+            alerts: liveAlerts.map((alert) => ({
+              name: alert.name,
+              distanceMiles: alert.distanceMiles,
+              acres: alert.acres,
+              contained: alert.contained,
+            })),
+          }),
+        }).catch((error) => {
+          console.error('Alert dispatch request failed:', error)
+        })
+
         if (hasSubmittedApplication && primaryAddress?.zip) {
           const risk = computeRiskScore(activeIncidents, center)
           const riskStyle =

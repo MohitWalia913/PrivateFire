@@ -108,6 +108,28 @@ export default function ApplyPage() {
         coverage_status: 'pending',
       })
 
+      await fetch('/api/applications/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName: form.firstName.trim(),
+          lastName: form.lastName.trim(),
+          email: form.email.trim(),
+          phone: form.phone.trim(),
+          address: form.address.trim(),
+          city: form.city.trim(),
+          state: form.state.trim().toUpperCase(),
+          zip: zip.trim(),
+          propertyType: form.propertyType,
+          homeValue: form.homeValue,
+          currentInsurance: form.currentInsurance,
+          notes: form.notes.trim(),
+        }),
+      }).catch((error) => {
+        // Application save is primary; email notification failures are logged server-side.
+        console.error('Application email notify request failed:', error)
+      })
+
       setSubmitted(true)
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Unable to submit application.')
