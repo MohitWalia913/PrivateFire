@@ -131,8 +131,8 @@ export default function DashboardPage() {
         }
 
       } catch (err) {
-        // Non-auth data errors should not force logout/redirect loops.
-        console.error('Dashboard initialization error:', err)
+        // This should not happen anymore since database functions handle errors gracefully
+        console.error('Unexpected dashboard initialization error:', err instanceof Error ? err.message : err || 'Unknown error')
       } finally {
         setLoading(false)
       }
@@ -268,7 +268,7 @@ export default function DashboardPage() {
     try {
       const supabase = getSupabaseBrowserClient()
       await supabase.auth.signOut()
-      router.push('/')
+      router.push('/login')
     } catch (err) {
       console.error('Logout error:', err)
     }

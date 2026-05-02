@@ -55,7 +55,7 @@ export default function Navbar() {
       const supabase = getSupabaseBrowserClient()
       await supabase.auth.signOut()
       setUser(null)
-      router.push('/')
+      router.push('/login')
     } catch (err) {
       console.error('Logout error:', err)
     }
@@ -86,12 +86,12 @@ export default function Navbar() {
                 PRIVATE <span className="text-orange-500">FIRE</span>
               </span>
             </Link>
-            <a
-              href="https://privatefire.com"
+            <Link
+              href="/dashboard"
               className="bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2 rounded-full transition-all"
             >
-              Back to site
-            </a>
+              Back to Dashboard
+            </Link>
           </div>
         </div>
       </nav>

@@ -376,7 +376,7 @@ export default function Home() {
           <div className="grid md:grid-cols-3 gap-8">
             {[
               { step: '01', icon: <MapPin size={28} />, title: 'Check Your ZIP', desc: 'Enter your California ZIP code to see if private fire protection is available or join the waitlist.' },
-              { step: '02', icon: <Shield size={28} />, title: 'Apply for Coverage', desc: 'Apply for one of 300 annual service slots. Starting at $10K/year with fixed increments. Highest application wins.' },
+              { step: '02', icon: <Shield size={28} />, title: 'Apply for Coverage', desc: 'Choose from our tiered service options. Pricing starts at $10,000/year. Simple application process with clear pricing.' },
               { step: '03', icon: <CheckCircle size={28} />, title: 'Stay Protected', desc: 'Your dedicated team monitors threats, conducts assessments, and deploys when fire threatens your property.' },
             ].map((item, i) => (
               <div key={i} className="relative z-10 bg-white border border-gray-200 rounded-2xl p-8 card-hover shadow-sm">

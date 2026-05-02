@@ -1,14 +1,23 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { FileText, ChevronLeft, CheckCircle, Shield, Clock, AlertTriangle, Edit3, User, Home } from 'lucide-react'
+import { FileText, ChevronLeft, CheckCircle, Shield, Clock, AlertTriangle, Edit3, User, Home, Sparkles } from 'lucide-react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { getCoverageApplication, upsertCoverageApplication, upsertUserProfile } from '@/lib/supabase/user-data'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 
 type CoverageStatus = 'not_covered' | 'pending' | 'active'
+
+type ZippopotamPlace = {
+  'place name'?: string
+  'state abbreviation'?: string
+}
+
+type ZippopotamResponse = {
+  places?: ZippopotamPlace[]
+}
 
 export default function MyApplicationPage() {
   const router = useRouter()
@@ -20,6 +29,8 @@ export default function MyApplicationPage() {
   const [submitted, setSubmitted] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [zipLookup, setZipLookup] = useState<'idle' | 'loading' | 'ok' | 'not_found' | 'error'>('idle')
+  const lastFetchedZipRef = useRef('')
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
@@ -84,8 +95,8 @@ export default function MyApplicationPage() {
           setIsEditing(true)
         }
       } catch (err) {
-        // Avoid redirecting authenticated users for non-auth data errors.
-        console.error('Application initialization error:', err)
+        // This should not happen anymore since database functions handle errors gracefully
+        console.error('Unexpected application initialization error:', err instanceof Error ? err.message : err || 'Unknown error')
       } finally {
         setLoading(false)
       }
@@ -93,6 +104,51 @@ export default function MyApplicationPage() {
 
     checkAuth()
   }, [])
+
+  useEffect(() => {
+    if (!isEditing) return
+
+    const zip = form.zip.replace(/\D/g, '').slice(0, 5)
+    if (zip.length !== 5) {
+      lastFetchedZipRef.current = ''
+      setZipLookup('idle')
+      return
+    }
+
+    if (lastFetchedZipRef.current === zip) return
+
+    const ac = new AbortController()
+    setZipLookup('loading')
+
+    void (async () => {
+      try {
+        const res = await fetch(`https://api.zippopotam.us/us/${zip}`, { signal: ac.signal })
+        if (!res.ok) {
+          lastFetchedZipRef.current = ''
+          setZipLookup('not_found')
+          return
+        }
+        const data = (await res.json()) as ZippopotamResponse
+        const place = data.places?.[0]
+        const city = place?.['place name']?.trim()
+        const stateAbbr = place?.['state abbreviation']?.trim().toUpperCase()
+        if (!city || !stateAbbr) {
+          lastFetchedZipRef.current = ''
+          setZipLookup('not_found')
+          return
+        }
+        lastFetchedZipRef.current = zip
+        setForm(f => ({ ...f, zip, city, state: stateAbbr }))
+        setZipLookup('ok')
+      } catch (e: unknown) {
+        if (e && typeof e === 'object' && 'name' in e && (e as { name: string }).name === 'AbortError') return
+        lastFetchedZipRef.current = ''
+        setZipLookup('error')
+      }
+    })()
+
+    return () => ac.abort()
+  }, [form.zip, isEditing])
 
   const statusConfig = {
     not_covered: {
@@ -213,7 +269,7 @@ export default function MyApplicationPage() {
 
   return (
     <div className="min-h-screen bg-[#f8f7f5] pt-20 pb-20">
-      <div className="max-w-2xl mx-auto px-4 sm:px-6">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6">
 
         {/* Breadcrumb */}
         <div className="flex items-center gap-3 mb-8">
@@ -226,11 +282,46 @@ export default function MyApplicationPage() {
 
         <div className="mb-8">
           <h1 className="text-3xl font-black text-gray-900">My Application</h1>
-          <p className="text-gray-600 mt-1 text-sm">View and update your private fire protection application.</p>
+          <p className="text-gray-600 mt-1 text-sm max-w-3xl">
+            Request private fire protection with tiered coverage. Your quote reflects property risk, location, and the response priority you choose.
+          </p>
         </div>
 
+        {/* Pricing overview — responsive grid */}
+        <div className="bg-white border border-gray-200 rounded-2xl p-6 mb-8 shadow-sm">
+          <div className="flex items-center gap-2 mb-2">
+            <Sparkles size={18} className="text-orange-500" />
+            <h2 className="text-gray-900 font-bold">Coverage &amp; pricing</h2>
+          </div>
+          <p className="text-gray-500 text-xs mb-6 leading-relaxed max-w-3xl">
+            Membership is structured in clear tiers—no auctions or price wars. You receive a tailored proposal after we review your application.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-4 flex flex-col h-full">
+              <span className="text-orange-500 font-black text-sm tabular-nums">$10,000+</span>
+              <p className="text-gray-900 text-sm font-semibold mt-2">Base coverage</p>
+              <p className="text-gray-500 text-xs mt-1.5 flex-1">Entry tier for qualified properties. Final investment depends on risk level and location.</p>
+            </div>
+            <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-4 flex flex-col h-full">
+              <span className="text-orange-500 font-black text-sm">Priority</span>
+              <p className="text-gray-900 text-sm font-semibold mt-2">Priority response</p>
+              <p className="text-gray-500 text-xs mt-1.5 flex-1">Elevated dispatch and faster resource commitment—priced as a higher service tier.</p>
+            </div>
+            <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-4 flex flex-col h-full sm:col-span-2 lg:col-span-1">
+              <span className="text-orange-500 font-black text-sm">Custom</span>
+              <p className="text-gray-900 text-sm font-semibold mt-2">High-risk estates &amp; large holdings</p>
+              <p className="text-gray-500 text-xs mt-1.5 flex-1">Complex exposure or extensive acreage receives a custom scope and quote from our team.</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+
+          {/* Main column — status + form */}
+          <div className="lg:col-span-8 space-y-6 min-w-0">
+
         {/* Coverage Status Banner */}
-        <div className={`border rounded-2xl p-5 mb-6 ${cfg.bg}`}>
+        <div className={`border rounded-2xl p-5 ${cfg.bg}`}>
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-white/70 border border-white/80 flex items-center justify-center">
               <cfg.Icon size={22} className={cfg.iconColor} />
@@ -245,7 +336,7 @@ export default function MyApplicationPage() {
 
         {/* Success confirmation */}
         {submitted && (
-          <div className="bg-green-50 border border-green-200 rounded-2xl p-5 mb-6 flex items-start gap-3">
+          <div className="bg-green-50 border border-green-200 rounded-2xl p-5 flex items-start gap-3">
             <CheckCircle size={20} className="text-green-500 flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-green-700 font-bold">Application Submitted!</p>
@@ -253,12 +344,12 @@ export default function MyApplicationPage() {
             </div>
           </div>
         )}
-        {error && <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-6 text-sm text-red-700">{error}</div>}
+        {error && <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-sm text-red-700">{error}</div>}
 
         <form onSubmit={handleSubmit}>
 
           {/* Personal Information */}
-          <div className="bg-white border border-gray-200 rounded-2xl p-6 mb-5 shadow-sm">
+          <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-gray-900 font-bold flex items-center gap-2">
                 <User size={16} className="text-orange-400" /> Personal Information
@@ -270,7 +361,7 @@ export default function MyApplicationPage() {
                 </button>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {[
                 { label: 'First Name', key: 'firstName', placeholder: 'John' },
                 { label: 'Last Name', key: 'lastName', placeholder: 'Smith' },
@@ -295,11 +386,44 @@ export default function MyApplicationPage() {
           </div>
 
           {/* Property Details */}
-          <div className="bg-white border border-gray-200 rounded-2xl p-6 mb-5 shadow-sm">
+          <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
             <h2 className="text-gray-900 font-bold mb-5 flex items-center gap-2">
               <Home size={16} className="text-orange-400" /> Property Details
             </h2>
             <div className="space-y-4">
+              <div>
+                <label className="text-gray-500 text-xs mb-1.5 block">ZIP Code</label>
+                {isEditing ? (
+                  <>
+                    <input
+                      inputMode="numeric"
+                      autoComplete="postal-code"
+                      value={form.zip}
+                      onChange={e => {
+                        const digits = e.target.value.replace(/\D/g, '').slice(0, 5)
+                        setForm(f => ({ ...f, zip: digits }))
+                      }}
+                      placeholder="90265"
+                      maxLength={5}
+                      className="w-full max-w-[11rem] bg-white border border-gray-200 focus:border-orange-400 rounded-xl px-3 py-2.5 text-gray-900 text-sm outline-none transition-colors placeholder-gray-400 tracking-wide"
+                    />
+                    <p className="text-gray-400 text-[11px] mt-1.5 leading-snug">
+                      Enter a 5-digit U.S. ZIP — city and state fill in automatically when found.
+                    </p>
+                    {zipLookup === 'loading' && (
+                      <p className="text-orange-500 text-[11px] mt-1 font-medium">Looking up location…</p>
+                    )}
+                    {zipLookup === 'not_found' && form.zip.length === 5 && (
+                      <p className="text-amber-600 text-[11px] mt-1">ZIP not found — enter city and state manually.</p>
+                    )}
+                    {zipLookup === 'error' && form.zip.length === 5 && (
+                      <p className="text-amber-600 text-[11px] mt-1">Could not look up ZIP — enter city and state manually.</p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-gray-900 text-sm font-medium">{form.zip || '—'}</p>
+                )}
+              </div>
               <div>
                 <label className="text-gray-500 text-xs mb-1.5 block">Street Address</label>
                 {isEditing ? (
@@ -310,8 +434,8 @@ export default function MyApplicationPage() {
                   <p className="text-gray-900 text-sm font-medium">{form.address || '—'}</p>
                 )}
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="col-span-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
                   <label className="text-gray-500 text-xs mb-1.5 block">City</label>
                   {isEditing ? (
                     <input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
@@ -325,23 +449,14 @@ export default function MyApplicationPage() {
                   <label className="text-gray-500 text-xs mb-1.5 block">State</label>
                   {isEditing ? (
                     <input value={form.state} onChange={e => setForm(f => ({ ...f, state: e.target.value }))}
-                      className="w-full bg-white border border-gray-200 focus:border-orange-400 rounded-xl px-3 py-2.5 text-gray-900 text-sm outline-none transition-colors" />
+                      placeholder="CA"
+                      className="w-full bg-white border border-gray-200 focus:border-orange-400 rounded-xl px-3 py-2.5 text-gray-900 text-sm outline-none transition-colors placeholder-gray-400" />
                   ) : (
                     <p className="text-gray-900 text-sm font-medium">{form.state}</p>
                   )}
                 </div>
-                <div>
-                  <label className="text-gray-500 text-xs mb-1.5 block">ZIP Code</label>
-                  {isEditing ? (
-                    <input value={form.zip} onChange={e => setForm(f => ({ ...f, zip: e.target.value }))}
-                      placeholder="90265"
-                      className="w-full bg-white border border-gray-200 focus:border-orange-400 rounded-xl px-3 py-2.5 text-gray-900 text-sm outline-none transition-colors placeholder-gray-400" />
-                  ) : (
-                    <p className="text-gray-900 text-sm font-medium">{form.zip || '—'}</p>
-                  )}
-                </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-gray-500 text-xs mb-1.5 block">Property Type</label>
                   {isEditing ? (
@@ -386,7 +501,7 @@ export default function MyApplicationPage() {
 
           {/* Additional Info (only in edit mode) */}
           {isEditing && (
-            <div className="bg-white border border-gray-200 rounded-2xl p-6 mb-5 shadow-sm">
+            <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
               <h2 className="text-gray-900 font-bold mb-4 flex items-center gap-2">
                 <FileText size={16} className="text-orange-400" /> Additional Information
               </h2>
@@ -425,13 +540,19 @@ export default function MyApplicationPage() {
 
         </form>
 
-        {/* Info box */}
-        <div className="mt-8 bg-orange-50 border border-orange-200 rounded-2xl p-5 flex items-start gap-3">
-          <Shield size={18} className="text-orange-400 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-orange-700 font-semibold text-sm">How the approval process works</p>
-            <p className="text-orange-600 text-xs mt-1 leading-relaxed">After you submit your application, our team will review your property details and contact you to schedule a risk assessment. Once approved, your coverage status will update to Active.</p>
           </div>
+
+          {/* Sidebar — process info (sticky on large screens) */}
+          <aside className="lg:col-span-4 space-y-6 lg:sticky lg:top-24 lg:self-start">
+            <div className="bg-orange-50 border border-orange-200 rounded-2xl p-5 flex items-start gap-3">
+              <Shield size={18} className="text-orange-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-orange-700 font-semibold text-sm">How the approval process works</p>
+                <p className="text-orange-600 text-xs mt-1 leading-relaxed">After you submit, we review your property for risk and location, then share a tiered coverage proposal (including any priority options you discuss with us). Once you enroll, your status updates to Active.</p>
+              </div>
+            </div>
+          </aside>
+
         </div>
 
       </div>

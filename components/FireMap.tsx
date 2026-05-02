@@ -1,8 +1,16 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { CALFIRE_REFRESH_MS, fetchCalFireGeoJson, type CalFireIncident } from '@/lib/calfire'
+import {
+  buildAllWmsLayers,
+  buildInitialLayerState,
+  WMS_LAYER_GROUPS,
+  OVERLAY_LAYER_IDS,
+  type WmsLayerConfig,
+} from '@/lib/map-layers-config'
 import ContactModal from './ContactModal'
+import { useFireMapDynamicLayers } from '@/components/useFireMapDynamicLayers'
 import {
   Flame, AlertTriangle, RefreshCw, ChevronLeft, ChevronRight,
   X, MapPin, Layers, Eye, EyeOff
@@ -12,80 +20,7 @@ import {
 
 type FireIncident = CalFireIncident
 
-interface LayerConfig {
-  id: string
-  label: string
-  desc: string
-  color: string
-  defaultOn: boolean
-  wmsUrl: string
-  wmsLayers: string
-  opacity: number
-  category: 'fire' | 'risk' | 'boundaries' | 'management'
-}
-
-// ── CAL FIRE ArcGIS WMS Layer Definitions ─────────────────────────────────
-
-const CALFIRE_LAYERS: LayerConfig[] = [
-  {
-    id: 'fhsz',
-    label: 'Fire Hazard Severity Zones',
-    desc: 'State zones: Moderate / High / Very High',
-    color: '#dc2626',
-    defaultOn: true,
-    wmsUrl: 'https://services.gis.ca.gov/arcgis/services/Environment/Fire_Severity_Zones/MapServer/WMSServer',
-    wmsLayers: '0',
-    opacity: 0.5,
-    category: 'risk',
-  },
-  {
-    id: 'perimeters',
-    label: 'Fire Perimeters',
-    desc: 'Historical burn boundaries since 1878',
-    color: '#7c3aed',
-    defaultOn: false,
-    wmsUrl: 'https://egis.fire.ca.gov/arcgis/services/FRAP/FirePerimeters_FS/MapServer/WMSServer',
-    wmsLayers: '0',
-    opacity: 0.55,
-    category: 'risk',
-  },
-  {
-    id: 'sra',
-    label: 'State Responsibility Areas',
-    desc: 'Fire protection jurisdiction by agency',
-    color: '#0ea5e9',
-    defaultOn: false,
-    wmsUrl: 'https://egis.fire.ca.gov/arcgis/services/FRAP/SRA/MapServer/WMSServer',
-    wmsLayers: '0',
-    opacity: 0.4,
-    category: 'boundaries',
-  },
-  {
-    id: 'management',
-    label: 'Forest Management Projects',
-    desc: 'Active fuel treatment & reduction projects',
-    color: '#059669',
-    defaultOn: false,
-    wmsUrl: 'https://egis.fire.ca.gov/arcgis/services/CalMapper/CalMAPPER_Public/MapServer/WMSServer',
-    wmsLayers: '0',
-    opacity: 0.55,
-    category: 'management',
-  },
-]
-
-const LAYER_GROUPS = [
-  { key: 'risk', title: 'Risk & Hazard Zones' },
-  { key: 'boundaries', title: 'Administrative Boundaries' },
-  { key: 'management', title: 'Management' },
-] as const
-
-// ── Build initial layer state ──────────────────────────────────────────────
-
-function buildInitialLayers(): Record<string, boolean> {
-  const s: Record<string, boolean> = { activeFires: true, heatmap: true }
-  CALFIRE_LAYERS.forEach(l => { s[l.id] = l.defaultOn })
-  return s
-}
+const ALL_WMS_LAYERS: WmsLayerConfig[] = buildAllWmsLayers()
 
 // ── Layer Toggle Row sub-component ────────────────────────────────────────
 
@@ -135,7 +70,9 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
   const [selected, setSelected] = useState<FireIncident | null>(null)
   const [apiSource, setApiSource] = useState<'live' | 'demo'>('demo')
   const [activeOnly, setActiveOnly] = useState(false)
-  const [activeLayers, setActiveLayers] = useState<Record<string, boolean>>(buildInitialLayers)
+  const [activeLayers, setActiveLayers] = useState<Record<string, boolean>>(buildInitialLayerState)
+  const [crewBlurMeters, setCrewBlurMeters] = useState(500)
+  const [crewOnlyDuringActiveFire, setCrewOnlyDuringActiveFire] = useState(true)
   const [showLayerDropdown, setShowLayerDropdown] = useState(false)
   const [isMapReady, setIsMapReady] = useState(false)
 
@@ -147,11 +84,18 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
     ? Math.round(visibleIncidents.reduce((s, f) => s + (f.PercentContained || 0), 0) / visibleIncidents.length)
     : 0
   const critical = visibleIncidents.filter(f => (f.PercentContained || 0) < 25).length
-  const activeLayerCount = [
-    activeLayers.activeFires,
-    activeLayers.heatmap,
-    ...CALFIRE_LAYERS.map(l => activeLayers[l.id]),
-  ].filter(Boolean).length
+  const activeLayerCount = useMemo(() => {
+    let n = 0
+    if (activeLayers.activeFires) n++
+    if (activeLayers.heatmap) n++
+    for (const l of ALL_WMS_LAYERS) {
+      if (activeLayers[l.id]) n++
+    }
+    for (const id of OVERLAY_LAYER_IDS) {
+      if (activeLayers[id]) n++
+    }
+    return n
+  }, [activeLayers])
 
   // ── Fetch incidents ────────────────────────────────────────────────────
 
@@ -176,6 +120,18 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
     }, CALFIRE_REFRESH_MS)
     return () => clearInterval(timer)
   }, [fetchIncidents])
+
+  useFireMapDynamicLayers({
+    mapObjRef: mapObjRef as React.RefObject<{
+      map: import('leaflet').Map
+      L: typeof import('leaflet')
+    } | null>,
+    isMapReady,
+    activeLayers,
+    incidents: visibleIncidents,
+    crewBlurMeters,
+    crewOnlyDuringActiveFire,
+  })
 
   // ── EFFECT 1: Init map + create all WMS layers ─────────────────────────
 
@@ -215,16 +171,21 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
         }
       }, 150)
 
-      // Create WMS layers for each CAL FIRE service
-      CALFIRE_LAYERS.forEach(cfg => {
+      // WMS layer services (CAL FIRE, Cal OES, NASA GIBS / optional FIRMS)
+      ALL_WMS_LAYERS.forEach(cfg => {
         try {
           const wmsLayer = L.tileLayer.wms(cfg.wmsUrl, {
             layers: cfg.wmsLayers,
             format: 'image/png',
             transparent: true,
             opacity: cfg.opacity,
-            version: '1.1.1',
-            attribution: '© CAL FIRE GIS',
+            version: cfg.wmsVersion || '1.1.1',
+            attribution:
+              cfg.category === 'satellite'
+                ? '© NASA GIBS / FIRMS'
+                : cfg.category === 'emergency'
+                  ? '© Cal OES / ArcGIS'
+                  : '© CAL FIRE GIS',
           })
           wmsLayerRefs.current[cfg.id] = wmsLayer
           if (cfg.defaultOn) wmsLayer.addTo(map)
@@ -539,9 +500,10 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
                     />
                   </div>
 
-                  {/* CAL FIRE ArcGIS layer groups */}
-                  {LAYER_GROUPS.map(group => {
-                    const groupLayers = CALFIRE_LAYERS.filter(l => l.category === group.key)
+                  {/* ArcGIS / NASA WMS layer groups */}
+                  {WMS_LAYER_GROUPS.map(group => {
+                    const groupLayers = ALL_WMS_LAYERS.filter(l => l.category === group.key)
+                    if (groupLayers.length === 0) return null
                     return (
                       <div key={group.key} className="p-3 border-b border-gray-100">
                         <p className="text-xs text-gray-400 font-medium uppercase tracking-wide mb-2">{group.title}</p>
@@ -551,7 +513,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
                             label={layer.label}
                             desc={layer.desc}
                             color={layer.color}
-                            active={activeLayers[layer.id]}
+                            active={!!activeLayers[layer.id]}
                             onToggle={() => toggleLayer(layer.id)}
                           />
                         ))}
@@ -559,14 +521,116 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
                     )
                   })}
 
+                  <div className="p-3 border-b border-gray-100">
+                    <p className="text-xs text-gray-400 font-medium uppercase tracking-wide mb-2">Weather & wind</p>
+                    <LayerToggleRow
+                      label="Weather grid"
+                      desc="Open-Meteo: temperature & humidity (viewport sample)"
+                      color="#38bdf8"
+                      active={!!activeLayers.weatherGrid}
+                      onToggle={() => toggleLayer('weatherGrid')}
+                    />
+                    <LayerToggleRow
+                      label="Wind field"
+                      desc="Speed + direction arrows (same forecast source)"
+                      color="#64748b"
+                      active={!!activeLayers.windField}
+                      onToggle={() => toggleLayer('windField')}
+                    />
+                  </div>
+
+                  <div className="p-3 border-b border-gray-100">
+                    <p className="text-xs text-gray-400 font-medium uppercase tracking-wide mb-2">Roads & water</p>
+                    <LayerToggleRow
+                      label="Wildfire road closures"
+                      desc="Caltrans emergency closures (zoom in for query)"
+                      color="#b91c1c"
+                      active={!!activeLayers.roadClosures}
+                      onToggle={() => toggleLayer('roadClosures')}
+                    />
+                    <LayerToggleRow
+                      label="Active fire perimeters"
+                      desc="USA current incident polygons (Living Atlas)"
+                      color="#ea580c"
+                      active={!!activeLayers.activeFirePerimeters}
+                      onToggle={() => toggleLayer('activeFirePerimeters')}
+                    />
+                    <LayerToggleRow
+                      label="Water sources"
+                      desc="OSM: hydrants, towers, reservoirs (small bbox)"
+                      color="#0ea5e9"
+                      active={!!activeLayers.waterSources}
+                      onToggle={() => toggleLayer('waterSources')}
+                    />
+                  </div>
+
+                  <div className="p-3 border-b border-gray-100">
+                    <p className="text-xs text-gray-400 font-medium uppercase tracking-wide mb-2">Cameras & crew (demo)</p>
+                    <LayerToggleRow
+                      label="Fire camera hubs"
+                      desc="Links to ALERTWildfire / partner portals (not embedded streams)"
+                      color="#a855f7"
+                      active={!!activeLayers.fireCameras}
+                      onToggle={() => toggleLayer('fireCameras')}
+                    />
+                    <LayerToggleRow
+                      label="Crew / units (simulated)"
+                      desc="Demo markers near incidents — not live GPS"
+                      color="#1e293b"
+                      active={!!activeLayers.crewTracking}
+                      onToggle={() => toggleLayer('crewTracking')}
+                    />
+                    {activeLayers.crewTracking && (
+                      <div className="mt-2 ml-3 space-y-2 rounded-lg border border-amber-200 bg-amber-50/80 p-2.5">
+                        <p className="text-[10px] font-semibold text-amber-900">Privacy & safety</p>
+                        <label className="flex items-center gap-2 text-[10px] text-gray-700">
+                          <input
+                            type="checkbox"
+                            checked={crewOnlyDuringActiveFire}
+                            onChange={e => setCrewOnlyDuringActiveFire(e.target.checked)}
+                            className="rounded border-gray-300"
+                          />
+                          Only when CAL FIRE shows active incidents
+                        </label>
+                        <div>
+                          <label className="text-[10px] text-gray-600">Blur radius: {crewBlurMeters} m</label>
+                          <input
+                            type="range"
+                            min={0}
+                            max={2500}
+                            step={50}
+                            value={crewBlurMeters}
+                            onChange={e => setCrewBlurMeters(Number(e.target.value))}
+                            className="w-full mt-1 accent-orange-500"
+                          />
+                        </div>
+                        <p className="text-[9px] text-amber-800/90 leading-snug">
+                          Connect real AVL/GPS through your dispatch integration; this map shows anonymized demo positions only.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-3 border-b border-gray-100">
+                    <p className="text-xs text-gray-400 font-medium uppercase tracking-wide mb-2">Other emergency POIs</p>
+                    <LayerToggleRow
+                      label="Hospitals & shelters"
+                      desc="OSM hospitals, clinics, shelters, assembly points"
+                      color="#7c3aed"
+                      active={!!activeLayers.emergencyPois}
+                      onToggle={() => toggleLayer('emergencyPois')}
+                    />
+                  </div>
+
                   {/* Data attribution */}
                   <div className="p-3 pb-6">
                     <p className="text-[10px] text-gray-400 leading-relaxed">
                       Map data from{' '}
                       <a href="https://egis.fire.ca.gov" target="_blank" rel="noreferrer" className="text-orange-500 hover:underline">CAL FIRE GIS</a>
-                      {' '}and{' '}
-                      <a href="https://services.gis.ca.gov" target="_blank" rel="noreferrer" className="text-orange-500 hover:underline">CA GIS Services</a>.
-                      {' '}WMS layers © CAL FIRE / FRAP.
+                      ,{' '}
+                      <a href="https://services.gis.ca.gov" target="_blank" rel="noreferrer" className="text-orange-500 hover:underline">CA GIS</a>
+                      , Cal OES, Open-Meteo, OpenStreetMap contributors, Esri Living Atlas, NASA GIBS.
+                      {' '}Verify evacuation and closures with official county / Caltrans channels before operations.
                     </p>
                   </div>
                 </div>
@@ -625,14 +689,14 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
             </button>
 
             {showLayerDropdown && (
-              <div className="absolute top-full right-0 mt-1 w-60 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
+              <div className="absolute top-full right-0 mt-1 w-72 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
                 <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
                   <p className="text-xs font-bold text-gray-700">Map Layers</p>
                   <button onClick={() => setShowLayerDropdown(false)} className="text-gray-400 hover:text-gray-700">
                     <X size={12} />
                   </button>
                 </div>
-                <div className="p-2 max-h-72 overflow-y-auto">
+                <div className="p-2 max-h-96 overflow-y-auto">
                   <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide px-1 mb-1">Fire Data</p>
                   {[
                     { id: 'activeFires', label: 'Active Incidents', color: '#ef4444' },
@@ -648,14 +712,33 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
                       {activeLayers[layer.id] ? <Eye size={11} className="text-orange-400" /> : <EyeOff size={11} className="text-gray-400" />}
                     </button>
                   ))}
-                  <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide px-1 mt-2 mb-1">CAL FIRE Layers</p>
-                  {CALFIRE_LAYERS.map(layer => (
+                  <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide px-1 mt-2 mb-1">WMS (basemap overlays)</p>
+                  {ALL_WMS_LAYERS.map(layer => (
                     <button key={layer.id} onClick={() => toggleLayer(layer.id)}
                       className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors mb-0.5 ${
                         activeLayers[layer.id] ? 'bg-orange-50 text-orange-700' : 'text-gray-600 hover:bg-gray-50'
                       }`}>
                       <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
                         style={{ background: activeLayers[layer.id] ? layer.color : '#d1d5db' }} />
+                      <span className="flex-1 text-left truncate">{layer.label}</span>
+                      {activeLayers[layer.id] ? <Eye size={11} className="text-orange-400" /> : <EyeOff size={11} className="text-gray-400" />}
+                    </button>
+                  ))}
+                  <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide px-1 mt-2 mb-1">Live overlays</p>
+                  {[
+                    { id: 'weatherGrid', label: 'Weather grid' },
+                    { id: 'windField', label: 'Wind' },
+                    { id: 'roadClosures', label: 'Road closures' },
+                    { id: 'activeFirePerimeters', label: 'Active perimeters' },
+                    { id: 'waterSources', label: 'Water sources' },
+                    { id: 'emergencyPois', label: 'Hospitals / shelters' },
+                    { id: 'fireCameras', label: 'Camera hubs' },
+                    { id: 'crewTracking', label: 'Crew (demo)' },
+                  ].map(layer => (
+                    <button key={layer.id} onClick={() => toggleLayer(layer.id)}
+                      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors mb-0.5 ${
+                        activeLayers[layer.id] ? 'bg-orange-50 text-orange-700' : 'text-gray-600 hover:bg-gray-50'
+                      }`}>
                       <span className="flex-1 text-left truncate">{layer.label}</span>
                       {activeLayers[layer.id] ? <Eye size={11} className="text-orange-400" /> : <EyeOff size={11} className="text-gray-400" />}
                     </button>

@@ -12,6 +12,7 @@ export default function LoginPage() {
   const [show, setShow] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [sessionPending, setSessionPending] = useState(true)
 
   useEffect(() => {
     const errorParam = new URLSearchParams(window.location.search).get('error')
@@ -19,6 +20,36 @@ export default function LoginPage() {
       setError(errorParam)
     }
   }, [])
+
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient()
+    let cancelled = false
+
+    void (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (cancelled) return
+        if (session?.user) {
+          router.replace('/dashboard')
+          return
+        }
+      } catch {
+        // Let the user see the login form if session cannot be read.
+      }
+      if (!cancelled) setSessionPending(false)
+    })()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        router.replace('/dashboard')
+      }
+    })
+
+    return () => {
+      cancelled = true
+      subscription.unsubscribe()
+    }
+  }, [router])
 
   useEffect(() => {
     const handleLegacyHashAuth = async () => {
@@ -82,6 +113,14 @@ export default function LoginPage() {
     }
 
     setLoading(false)
+  }
+
+  if (sessionPending) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" aria-hidden />
+      </div>
+    )
   }
 
   return (

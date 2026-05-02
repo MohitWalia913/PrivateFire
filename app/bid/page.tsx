@@ -332,24 +332,40 @@ export default function ApplyPage() {
                       </div>
                       <div className="space-y-4">
                         <div>
-                          <label className="block text-xs text-gray-600 font-medium mb-1.5">Property Address</label>
+                          <label className="block text-xs text-gray-600 font-medium mb-1.5">ZIP Code</label>
                           <div className="relative">
                             <MapPin size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                            <input required value={form.address} onChange={e => setForm(f => ({...f, address: e.target.value}))} placeholder="123 Oak Ridge Drive" className={`${inputClass} pl-9`} />
+                            <input required value={zip} onChange={async (e) => {
+                              const newZip = e.target.value.replace(/\D/g,'').slice(0,5)
+                              setZip(newZip)
+                              if (newZip.length === 5) {
+                                try {
+                                  const center = await geocodeZip(newZip)
+                                  if (center) {
+                                    setForm(f => ({...f, city: center.city || '', state: center.state || 'CA'}))
+                                  }
+                                } catch {
+                                  // Keep existing values on geocode failure
+                                }
+                              }
+                            }} placeholder="90265" className={`${inputClass} pl-9`} maxLength={5} />
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                          <div className="col-span-1 sm:col-span-1">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
                             <label className="block text-xs text-gray-600 font-medium mb-1.5">City</label>
                             <input required value={form.city} onChange={e => setForm(f => ({...f, city: e.target.value}))} placeholder="Malibu" className={inputClass} />
                           </div>
                           <div>
                             <label className="block text-xs text-gray-600 font-medium mb-1.5">State</label>
-                            <input value="CA" disabled className={`${inputClass} bg-gray-50 text-gray-500 cursor-not-allowed`} />
+                            <input value={form.state} onChange={e => setForm(f => ({...f, state: e.target.value}))} placeholder="CA" className={inputClass} />
                           </div>
-                          <div>
-                            <label className="block text-xs text-gray-600 font-medium mb-1.5">ZIP Code</label>
-                            <input value={zip} disabled className={`${inputClass} bg-gray-50 text-gray-500 cursor-not-allowed`} />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 font-medium mb-1.5">Property Address</label>
+                          <div className="relative">
+                            <MapPin size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <input required value={form.address} onChange={e => setForm(f => ({...f, address: e.target.value}))} placeholder="123 Oak Ridge Drive" className={`${inputClass} pl-9`} />
                           </div>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

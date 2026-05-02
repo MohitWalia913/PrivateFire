@@ -55,7 +55,10 @@ export async function getUserProfile(
     .eq('user_id', userId)
     .maybeSingle()
 
-  if (error) throw error
+  if (error) {
+    console.warn('Failed to fetch user profile:', error.message || error)
+    return null
+  }
   return data
 }
 
@@ -77,7 +80,10 @@ export async function getAlertSettings(
     .eq('user_id', userId)
     .maybeSingle()
 
-  if (error) throw error
+  if (error) {
+    console.warn('Failed to fetch alert settings:', error.message || error)
+    return null
+  }
   return data
 }
 
@@ -99,7 +105,10 @@ export async function getCoverageApplication(
     .eq('user_id', userId)
     .maybeSingle()
 
-  if (error) throw error
+  if (error) {
+    console.warn('Failed to fetch coverage application:', error.message || error)
+    return null
+  }
   return data
 }
 
