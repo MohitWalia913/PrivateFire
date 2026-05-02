@@ -30,7 +30,7 @@ export default function Footer() {
                 { label: 'Home', href: '/' },
                 { label: 'Fire Map', href: '/map' },
                 { label: 'Get Protection', href: '/bid' },
-                { label: 'About Us', href: '/#about' },
+                { label: 'About Us', href: '/about' },
                 { label: 'Contact Us', href: '/contact' },
                 { label: 'Join Our Network', href: '/join-network' },
               ].map(item => (

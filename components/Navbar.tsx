@@ -65,7 +65,7 @@ export default function Navbar() {
     { href: '/', label: 'Home' },
     { href: '/map', label: 'Fire Map' },
     { href: '/join-network', label: 'Join Network' },
-    { href: '/#about', label: 'About Us' },
+    { href: '/about', label: 'About Us' },
     { href: '/contact', label: 'Contact' },
   ]
 
