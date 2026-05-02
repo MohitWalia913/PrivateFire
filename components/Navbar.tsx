@@ -40,7 +40,8 @@ export default function Navbar() {
     pathname.startsWith('/login') ||
     pathname.startsWith('/verify-email') ||
     pathname.startsWith('/forgot-password') ||
-    pathname.startsWith('/reset-password')
+    pathname.startsWith('/reset-password') ||
+    pathname.startsWith('/embed')
   ) {
     return null
   }
