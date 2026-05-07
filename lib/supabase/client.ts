@@ -45,7 +45,12 @@ export function getSupabaseBrowserClient(): SupabaseClient {
   const supabaseUrl = getRequiredPublicEnv('NEXT_PUBLIC_SUPABASE_URL')
   const supabaseAnonKey = getPublicSupabaseKey()
 
-  supabaseBrowserClient = createClient(supabaseUrl, supabaseAnonKey)
+  supabaseBrowserClient = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      flowType: 'pkce',
+      detectSessionInUrl: true,
+    },
+  })
   return supabaseBrowserClient
 }
 
