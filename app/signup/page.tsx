@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Flame, Eye, EyeOff, User, Mail, Lock, Phone, CheckCircle } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import { Eye, EyeOff, FileText, Flame, Lock, Mail, Map, Phone, TrendingUp, User, Bell } from 'lucide-react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { signInWithGoogle } from '@/lib/supabase/oauth'
 
@@ -72,11 +73,11 @@ export default function SignUpPage() {
     }
   }
 
-  const perks = [
-    'Free access to live California fire map',
-    'Fire risk prediction layer',
-    'Emergency alerts near your address',
-    'Access to the coverage application system',
+  const perks: { text: string; Icon: LucideIcon }[] = [
+    { text: 'Free access to live California fire map', Icon: Map },
+    { text: 'Fire risk prediction layer', Icon: TrendingUp },
+    { text: 'Emergency alerts near your address', Icon: Bell },
+    { text: 'Access to the coverage application system', Icon: FileText },
   ]
 
   const inputClass = "w-full bg-white border border-gray-300 rounded-xl pl-9 pr-3 py-3 text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:border-orange-500 transition-colors"
@@ -93,10 +94,10 @@ export default function SignUpPage() {
           <h2 className="text-4xl font-black text-white mb-4 leading-tight">Join California&apos;s Premier Fire Protection Network</h2>
           <p className="text-orange-100 mb-8 leading-relaxed">Free to sign up. Access the live fire map and real-time fire alerts. Upgrade to apply for private fire coverage.</p>
           <div className="space-y-3">
-            {perks.map(p => (
-              <div key={p} className="flex items-center gap-3">
-                <CheckCircle size={16} className="text-white flex-shrink-0" />
-                <span className="text-orange-100 text-sm">{p}</span>
+            {perks.map(({ text, Icon }) => (
+              <div key={text} className="flex items-center gap-3">
+                <Icon size={18} className="text-white shrink-0" strokeWidth={1.75} aria-hidden />
+                <span className="text-orange-100 text-sm">{text}</span>
               </div>
             ))}
           </div>

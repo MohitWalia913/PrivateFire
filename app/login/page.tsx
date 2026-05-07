@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Flame, Eye, EyeOff, Mail, Lock, Shield } from 'lucide-react'
+import { Bell, Eye, EyeOff, Flame, Lock, Mail, Map, Phone, Shield } from 'lucide-react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { signInWithGoogle } from '@/lib/supabase/oauth'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
@@ -154,9 +154,18 @@ export default function LoginPage() {
           <h2 className="text-4xl font-black text-white mb-4 leading-tight">Welcome Back to Your Fire Protection Dashboard</h2>
           <p className="text-orange-100 mb-8 leading-relaxed">Monitor active fires, manage your protection bids, and stay connected with your dedicated fire response team.</p>
           <div className="grid grid-cols-2 gap-4">
-            {[['🗺️','Live Fire Map'],['🔥','Risk Alerts'],['🛡️','Protection Status'],['📞','Team Contact']].map(([icon, label]) => (
+            {(
+              [
+                { Icon: Map, label: 'Live Fire Map' },
+                { Icon: Bell, label: 'Risk Alerts' },
+                { Icon: Shield, label: 'Protection Status' },
+                { Icon: Phone, label: 'Team Contact' },
+              ] as const
+            ).map(({ Icon, label }) => (
               <div key={label} className="bg-white/15 border border-white/20 rounded-xl p-4">
-                <div className="text-2xl mb-2">{icon}</div>
+                <div className="mb-2 text-white">
+                  <Icon className="h-8 w-8" strokeWidth={1.75} aria-hidden />
+                </div>
                 <p className="text-white text-sm font-medium">{label}</p>
               </div>
             ))}
