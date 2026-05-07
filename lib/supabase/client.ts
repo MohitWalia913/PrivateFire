@@ -2,6 +2,7 @@
 
 import { createBrowserClient } from '@supabase/ssr'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { authCookieOptions } from '@/lib/supabase/auth-cookies'
 
 let supabaseBrowserClient: SupabaseClient | null = null
 
@@ -39,6 +40,10 @@ function getPublicSupabaseKey(): string {
 }
 
 export function getSupabaseBrowserClient(): SupabaseClient {
+  if (typeof window === 'undefined') {
+    throw new Error('getSupabaseBrowserClient must only run in the browser')
+  }
+
   if (supabaseBrowserClient) {
     return supabaseBrowserClient
   }
@@ -46,18 +51,15 @@ export function getSupabaseBrowserClient(): SupabaseClient {
   const supabaseUrl = getRequiredPublicEnv('NEXT_PUBLIC_SUPABASE_URL')
   const supabaseAnonKey = getPublicSupabaseKey()
 
-  const cookieDomainRaw =
-    typeof process.env.NEXT_PUBLIC_AUTH_COOKIE_DOMAIN === 'string'
-      ? process.env.NEXT_PUBLIC_AUTH_COOKIE_DOMAIN.trim()
-      : ''
-
   /*
    * @supabase/ssr createBrowserClient stores the PKCE code verifier in cookies (not localStorage),
-   * so it survives redirects. Plain @supabase/supabase-js loses the verifier easily (subdomain hops,
-   * storage partitioning, strict browser policies).
+   * so it survives redirects. OAuth code exchange completes in `app/auth/callback/route.ts` using the
+   * same cookies sent on that request — do not rely on client-side exchangeCodeForSession for PKCE.
    */
+  const cookieExtras = authCookieOptions()
+
   supabaseBrowserClient = createBrowserClient(supabaseUrl, supabaseAnonKey, {
-    ...(cookieDomainRaw ? { cookieOptions: { domain: cookieDomainRaw.replace(/^\./, '') } } : {}),
+    ...(cookieExtras ? { cookieOptions: cookieExtras } : {}),
   })
   return supabaseBrowserClient
 }

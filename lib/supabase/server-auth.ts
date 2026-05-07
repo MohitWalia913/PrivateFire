@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { authCookieOptions } from '@/lib/supabase/auth-cookies'
 
 export async function createSupabaseServerAuthClient() {
   const cookieStore = await cookies()
@@ -14,13 +15,10 @@ export async function createSupabaseServerAuthClient() {
     throw new Error('Missing required environment variable: NEXT_PUBLIC_SUPABASE_ANON_KEY (or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)')
   }
 
-  const cookieDomainRaw =
-    typeof process.env.NEXT_PUBLIC_AUTH_COOKIE_DOMAIN === 'string'
-      ? process.env.NEXT_PUBLIC_AUTH_COOKIE_DOMAIN.trim()
-      : ''
+  const cookieExtras = authCookieOptions()
 
   return createServerClient(supabaseUrl, supabaseAnonKey, {
-    ...(cookieDomainRaw ? { cookieOptions: { domain: cookieDomainRaw.replace(/^\./, '') } } : {}),
+    ...(cookieExtras ? { cookieOptions: cookieExtras } : {}),
     cookies: {
       getAll() {
         return cookieStore.getAll()

@@ -1,15 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-
-/** Optional `.privatefire.com` style sharing across subdomains; leave unset for host-only cookies. */
-function authCookieOptions(): { domain: string } | undefined {
-  const raw =
-    typeof process.env.NEXT_PUBLIC_AUTH_COOKIE_DOMAIN === 'string'
-      ? process.env.NEXT_PUBLIC_AUTH_COOKIE_DOMAIN.trim()
-      : ''
-  if (!raw) return undefined
-  return { domain: raw.replace(/^\./, '') }
-}
+import { authCookieOptions } from '@/lib/supabase/auth-cookies'
 
 /** Refresh auth cookies on each navigation (required when using SSR Supabase cookie storage). */
 export async function updateSession(request: NextRequest) {

@@ -1,10 +1,5 @@
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
-
-/** Blocks open redirects — only allow same-origin paths. */
-export function oauthSafeNext(raw: string | null): string {
-  if (!raw || raw.startsWith('//')) return '/dashboard'
-  return raw.startsWith('/') ? raw : '/dashboard'
-}
+import { oauthSafeNext } from '@/lib/supabase/oauth-redirect'
 
 /** Google OAuth via Supabase. Configure provider + redirect URLs in the Supabase dashboard first. */
 export async function signInWithGoogle(opts?: { next?: string }) {
