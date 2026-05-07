@@ -8,6 +8,12 @@ import { usePathname } from 'next/navigation'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 
+/** Public marketing site (app subdomain returns here). Override with NEXT_PUBLIC_MARKETING_SITE_URL. */
+const MARKETING_HOME_URL =
+  (typeof process.env.NEXT_PUBLIC_MARKETING_SITE_URL === 'string'
+    ? process.env.NEXT_PUBLIC_MARKETING_SITE_URL.trim()
+    : '') || 'https://privatefire.com'
+
 export default function Navbar() {
   const [open, setOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
@@ -88,10 +94,10 @@ export default function Navbar() {
               </span>
             </Link>
             <Link
-              href="/dashboard"
+              href={MARKETING_HOME_URL}
               className="bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2 rounded-full transition-all"
             >
-              Back to Dashboard
+              Back to Site
             </Link>
           </div>
         </div>
