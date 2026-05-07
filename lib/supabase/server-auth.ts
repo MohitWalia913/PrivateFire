@@ -14,7 +14,13 @@ export async function createSupabaseServerAuthClient() {
     throw new Error('Missing required environment variable: NEXT_PUBLIC_SUPABASE_ANON_KEY (or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)')
   }
 
+  const cookieDomainRaw =
+    typeof process.env.NEXT_PUBLIC_AUTH_COOKIE_DOMAIN === 'string'
+      ? process.env.NEXT_PUBLIC_AUTH_COOKIE_DOMAIN.trim()
+      : ''
+
   return createServerClient(supabaseUrl, supabaseAnonKey, {
+    ...(cookieDomainRaw ? { cookieOptions: { domain: cookieDomainRaw.replace(/^\./, '') } } : {}),
     cookies: {
       getAll() {
         return cookieStore.getAll()

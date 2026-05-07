@@ -1,6 +1,6 @@
 'use client'
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { createBrowserClient, type SupabaseClient } from '@supabase/ssr'
 
 let supabaseBrowserClient: SupabaseClient | null = null
 
@@ -45,11 +45,18 @@ export function getSupabaseBrowserClient(): SupabaseClient {
   const supabaseUrl = getRequiredPublicEnv('NEXT_PUBLIC_SUPABASE_URL')
   const supabaseAnonKey = getPublicSupabaseKey()
 
-  supabaseBrowserClient = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      flowType: 'pkce',
-      detectSessionInUrl: true,
-    },
+  const cookieDomainRaw =
+    typeof process.env.NEXT_PUBLIC_AUTH_COOKIE_DOMAIN === 'string'
+      ? process.env.NEXT_PUBLIC_AUTH_COOKIE_DOMAIN.trim()
+      : ''
+
+  /*
+   * @supabase/ssr createBrowserClient stores the PKCE code verifier in cookies (not localStorage),
+   * so it survives redirects. Plain @supabase/supabase-js loses the verifier easily (subdomain hops,
+   * storage partitioning, strict browser policies).
+   */
+  supabaseBrowserClient = createBrowserClient(supabaseUrl, supabaseAnonKey, {
+    ...(cookieDomainRaw ? { cookieOptions: { domain: cookieDomainRaw.replace(/^\./, '') } } : {}),
   })
   return supabaseBrowserClient
 }
