@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Flame, Eye, EyeOff, Mail, Lock, Shield } from 'lucide-react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { signInWithGoogle } from '@/lib/supabase/oauth'
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -41,7 +42,8 @@ export default function LoginPage() {
       if (!cancelled) setSessionPending(false)
     })()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event: AuthChangeEvent, session: Session | null) => {
       if (session?.user) {
         router.replace('/dashboard')
       }

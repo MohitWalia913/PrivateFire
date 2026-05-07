@@ -9,7 +9,7 @@ import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { CALFIRE_REFRESH_MS, computeRiskScore, fetchCalFireList, haversineMiles, toRelativeTime } from '@/lib/calfire'
 import { geocodeAddress, geocodeZip } from '@/lib/geocode'
 import { getAlertSettings, getCoverageApplication, getUserProfile } from '@/lib/supabase/user-data'
-import type { User as SupabaseUser } from '@supabase/supabase-js'
+import type { User as SupabaseUser, AuthChangeEvent, Session } from '@supabase/supabase-js'
 
 const FireMap = dynamic(() => import('@/components/FireMap'), { ssr: false, loading: () => (
   <div className="w-full h-full bg-gray-50 flex items-center justify-center">
@@ -142,7 +142,8 @@ export default function DashboardPage() {
 
     // Set up auth state listener
     const supabase = getSupabaseBrowserClient()
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event: AuthChangeEvent, session: Session | null) => {
       if (!session?.user) {
         setUser(null)
         router.push('/login')
