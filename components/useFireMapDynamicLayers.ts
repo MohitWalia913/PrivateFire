@@ -221,7 +221,11 @@ export function useFireMapDynamicLayers(opts: {
     }
 
     contoursG.clearLayers()
-    if (activeLayers.airQualityContours) {
+    let contourFeatureCount = 0
+    const loadAirNowContours =
+      activeLayers.airQuality || activeLayers.airQualityContours
+
+    if (loadAirNowContours) {
       try {
         const cb = normalizeAirNowBbox({ south, west, north, east })
         const cq = new URLSearchParams({
@@ -233,34 +237,40 @@ export function useFireMapDynamicLayers(opts: {
         const res = await fetch(`/api/map/air-quality-contours?${cq.toString()}`)
         const data = (await res.json()) as { type?: string; features?: unknown[] }
         const features = Array.isArray(data.features) ? data.features : []
-        L.geoJSON({ type: 'FeatureCollection', features } as never, {
-          style: feat => {
-            const pol = (feat?.properties as { pollutant?: string } | undefined)?.pollutant
-            if (pol === 'O3') {
-              return {
-                color: '#6d28d9',
-                weight: 1.5,
-                opacity: 0.65,
-                fillColor: '#ddd6fe',
-                fillOpacity: 0.14,
+        contourFeatureCount = features.length
+        if (features.length > 0) {
+          const emphasisAir = !!(loadAirNowContours && activeLayers.airQuality)
+          L.geoJSON({ type: 'FeatureCollection', features } as never, {
+            style: feat => {
+              const pol = (feat?.properties as { pollutant?: string } | undefined)?.pollutant
+              const fillOp = emphasisAir ? 0.26 : 0.18
+              if (pol === 'O3') {
+                return {
+                  color: '#6d28d9',
+                  weight: 1.5,
+                  opacity: 0.72,
+                  fillColor: '#ddd6fe',
+                  fillOpacity: fillOp,
+                }
               }
-            }
-            return {
-              color: '#c2410c',
-              weight: 1.5,
-              opacity: 0.65,
-              fillColor: '#fdba74',
-              fillOpacity: 0.14,
-            }
-          },
-        }).addTo(contoursG)
+              return {
+                color: '#c2410c',
+                weight: 1.5,
+                opacity: 0.72,
+                fillColor: '#fdba74',
+                fillOpacity: fillOp,
+              }
+            },
+          }).addTo(contoursG)
+        }
       } catch (e) {
         console.warn('AirNow contours failed', e)
       }
     }
 
-    airG.clearLayers()
-    if (activeLayers.airQuality) {
+    if (!activeLayers.airQuality) {
+      airG.clearLayers()
+    } else {
       try {
         const aqBox = normalizeAirNowBbox({ south, west, north, east })
         const airQs = new URLSearchParams({
@@ -286,63 +296,67 @@ export function useFireMapDynamicLayers(opts: {
           }>
           error?: string
         }
-        if (!res.ok && data.error) {
-          console.warn('AirNow:', data.error)
-        }
-        const sites = data.sites || []
-        for (const p of sites) {
-          const fill = aqiMarkerColor(p.aqi)
-          const stroke = p.aqi != null && p.aqi > 100 ? '#1e293b' : '#334155'
-          const isForecast = p.kind === 'forecast'
-          const title = p.siteName ? escapeHtml(p.siteName) : isForecast ? 'Forecast area' : 'Air monitor'
-          const aqiLabel = p.aqi != null ? String(Math.round(p.aqi)) : '—'
-          const cat = p.category ? escapeHtml(p.category) : ''
-          const param = p.parameter ? escapeHtml(p.parameter) : 'PM2.5'
-          const when = p.observedUtc ? escapeHtml(p.observedUtc) : ''
-          const summary = p.forecastSummary ? escapeHtml(p.forecastSummary) : ''
-          const fDate = p.forecastDate ? escapeHtml(p.forecastDate) : ''
+        if (!res.ok) {
+          if (data.error) console.warn('AirNow:', data.error)
+          /* Keep existing circles if refresh fails (rate limits / transient errors). */
+        } else {
+          airG.clearLayers()
+          const sites = data.sites || []
+          const hasContourFill = contourFeatureCount > 0
+          const radiusObs = hasContourFill ? 9000 : 20000
+          const radiusFc = hasContourFill ? 12000 : 26000
 
-          if (isForecast) {
-            const m = L.marker([p.lat, p.lng], {
-              icon: L.divIcon({
-                className: '',
-                html: `<div style="width:13px;height:13px;background:${fill};border:2px solid ${stroke};transform:rotate(45deg);box-sizing:border-box;box-shadow:0 1px 3px rgba(0,0,0,.25);"></div>`,
-                iconSize: [13, 13],
-                iconAnchor: [6.5, 6.5],
-              }),
+          for (const p of sites) {
+            const fill = aqiMarkerColor(p.aqi)
+            const stroke = p.aqi != null && p.aqi > 100 ? '#1e293b' : '#334155'
+            const isForecast = p.kind === 'forecast'
+            const title = p.siteName ? escapeHtml(p.siteName) : isForecast ? 'Forecast area' : 'Air monitor'
+            const aqiLabel = p.aqi != null ? String(Math.round(p.aqi)) : '—'
+            const cat = p.category ? escapeHtml(p.category) : ''
+            const param = p.parameter ? escapeHtml(p.parameter) : 'PM2.5'
+            const when = p.observedUtc ? escapeHtml(p.observedUtc) : ''
+            const summary = p.forecastSummary ? escapeHtml(p.forecastSummary) : ''
+            const fDate = p.forecastDate ? escapeHtml(p.forecastDate) : ''
+
+            const disk = L.circle([p.lat, p.lng], {
+              radius: isForecast ? radiusFc : radiusObs,
+              fillColor: fill,
+              color: stroke,
+              weight: isForecast ? 2 : 1.5,
+              opacity: 0.9,
+              fillOpacity: hasContourFill ? 0.28 : 0.45,
+              dashArray: isForecast ? '10 8' : undefined,
             })
-            m.bindPopup(
-              `<div style="font-size:12px;line-height:1.35;max-width:240px;">
+
+            if (isForecast) {
+              disk.bindPopup(
+                `<div style="font-size:12px;line-height:1.35;max-width:240px;">
               <strong>${title}</strong>${p.stateCode ? ` <span style="color:#64748b">${escapeHtml(p.stateCode)}</span>` : ''}<br/>
               <span style="color:${stroke}">Worst-case forecast AQI <strong>${aqiLabel}</strong>${cat ? ` · ${cat}` : ''}</span>
               ${summary ? `<br/><span style="font-size:11px;color:#475569">${summary}</span>` : ''}
               ${fDate ? `<br/><span style="font-size:11px;color:#64748b">Issued for ${fDate}</span>` : ''}
               <p style="font-size:10px;color:#94a3b8;margin:8px 0 0;">EPA reporting-area forecast — preliminary.</p>
             </div>`,
-            )
-            m.bindTooltip(`Forecast · AQI ${aqiLabel}`, { direction: 'top', className: 'leaflet-tooltip-dark' })
-            m.addTo(airG)
-          } else {
-            const cm = L.circleMarker([p.lat, p.lng], {
-              radius: 8,
-              fillColor: fill,
-              color: stroke,
-              weight: 2,
-              fillOpacity: 0.9,
-            })
-            cm.bindPopup(
-              `<div style="font-size:12px;line-height:1.35;max-width:220px;">
+              )
+              disk.bindTooltip(`Forecast · AQI ${aqiLabel}`, {
+                direction: 'top',
+                className: 'leaflet-tooltip-dark',
+              })
+            } else {
+              disk.bindPopup(
+                `<div style="font-size:12px;line-height:1.35;max-width:220px;">
               <strong>${title}</strong><br/>
               <span style="color:${stroke}">${param}: AQI <strong>${aqiLabel}</strong>${cat ? ` · ${cat}` : ''}</span>
               ${when ? `<br/><span style="font-size:11px;color:#64748b">${when} UTC</span>` : ''}
-              <p style="font-size:10px;color:#94a3b8;margin:8px 0 0;">Preliminary monitor observation — not for regulation.</p>
+              <p style="font-size:10px;color:#94a3b8;margin:8px 0 0;">Approximate influence area — preliminary monitor reading.</p>
             </div>`,
-            )
-            cm.bindTooltip(`Obs · AQI ${aqiLabel}${cat ? ` · ${cat}` : ''}`, {
-              direction: 'top',
-              className: 'leaflet-tooltip-dark',
-            })
-            cm.addTo(airG)
+              )
+              disk.bindTooltip(`Observation · AQI ${aqiLabel}${cat ? ` · ${cat}` : ''}`, {
+                direction: 'top',
+                className: 'leaflet-tooltip-dark',
+              })
+            }
+            disk.addTo(airG)
           }
         }
       } catch (e) {

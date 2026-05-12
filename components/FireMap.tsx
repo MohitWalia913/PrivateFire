@@ -56,7 +56,12 @@ function LayerToggleRow({
 
 export default function FireMap({ compact = false }: { compact?: boolean }) {
   const mapRef = useRef<HTMLDivElement>(null)
-  const mapObjRef = useRef<{ map: unknown; L: unknown } | null>(null)
+  const mapObjRef = useRef<{
+    map: unknown
+    L: unknown
+    /** Isolate CAL FIRE pins so refresh never strips AirNow / weather overlays */
+    fireIncidentsLayer?: import('leaflet').LayerGroup
+  } | null>(null)
   const wmsLayerRefs = useRef<Record<string, unknown>>({})
   const heatLayerRef = useRef<unknown>(null)
   const mapReadyRef = useRef(false)
@@ -156,6 +161,8 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
         zoomControl: false,
       })
 
+      const fireIncidentsLayer = L.layerGroup().addTo(map)
+
       // Base tile layer
       L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
         attribution: '© OpenStreetMap © CARTO',
@@ -210,7 +217,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
         }
       } catch { /* optional */ }
 
-      if (!cancelled) mapObjRef.current = { map, L }
+      if (!cancelled) mapObjRef.current = { map, L, fireIncidentsLayer }
       if (!cancelled) setIsMapReady(true)
     }
 
@@ -235,11 +242,9 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
 
   useEffect(() => {
     if (!mapObjRef.current || !isMapReady) return
-    const { map, L } = mapObjRef.current as {
+    const { map, L, fireIncidentsLayer } = mapObjRef.current as {
       map: {
         flyTo: (c: [number, number], z: number, o: object) => void
-        eachLayer: (fn: (l: unknown) => void) => void
-        removeLayer: (l: unknown) => void
       }
       L: {
         marker: (c: [number, number], o: object) => {
@@ -249,13 +254,12 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
         }
         divIcon: (o: object) => unknown
       }
+      fireIncidentsLayer?: import('leaflet').LayerGroup
     }
 
-    // Remove existing markers (identified by _latlng property)
-    map.eachLayer((layer: unknown) => {
-      // @ts-ignore
-      if (layer._latlng) map.removeLayer(layer)
-    })
+    const fg = fireIncidentsLayer
+    if (!fg) return
+    fg.clearLayers()
 
     if (visibleIncidents.length === 0) return
 
@@ -290,7 +294,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
         `<strong>${inc.Name}</strong><br>${inc.County} Co. · ${(inc.AcresBurned || 0).toLocaleString()} ac · ${c}% contained`,
         { className: 'leaflet-tooltip-dark', direction: 'top', offset: [0, -10] }
       )
-      marker.addTo(map)
+      marker.addTo(fg)
     })
   }, [visibleIncidents, compact, activeLayers.activeFires, isMapReady])
 
@@ -539,14 +543,14 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
                     />
                     <LayerToggleRow
                       label="Air quality (AirNow)"
-                      desc="Monitor observations + forecast reporting areas (lat/long grid)"
+                      desc="EPA contours + shaded zones around monitors & forecasts (auto-loads map fills)"
                       color="#16a34a"
                       active={!!activeLayers.airQuality}
                       onToggle={() => toggleLayer('airQuality')}
                     />
                     <LayerToggleRow
                       label="AQ contours (O₃ / PM2.5)"
-                      desc="EPA KML contours for current UTC hour — subtle fills under markers"
+                      desc="Contour fills only — same EPA KML layers without station disks"
                       color="#9333ea"
                       active={!!activeLayers.airQualityContours}
                       onToggle={() => toggleLayer('airQualityContours')}
