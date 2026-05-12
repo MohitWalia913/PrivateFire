@@ -18,6 +18,25 @@ function tempColor(f: number | null): string {
   return '#dc2626'
 }
 
+/** EPA AQI category colors (approximate swatches used on AirNow). */
+function aqiMarkerColor(aqi: number | null): string {
+  if (aqi == null || Number.isNaN(aqi)) return '#94a3b8'
+  if (aqi <= 50) return '#00e400'
+  if (aqi <= 100) return '#ffff00'
+  if (aqi <= 150) return '#ff7e00'
+  if (aqi <= 200) return '#ff0000'
+  if (aqi <= 300) return '#8f3f97'
+  return '#7e0023'
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
 function debounce(fn: () => void, ms: number) {
   let t: ReturnType<typeof setTimeout> | undefined
   return () => {
@@ -39,6 +58,7 @@ export function useFireMapDynamicLayers(opts: {
   const groupsRef = useRef<{
     weather: import('leaflet').LayerGroup | null
     wind: import('leaflet').LayerGroup | null
+    airQuality: import('leaflet').LayerGroup | null
     roads: import('leaflet').LayerGroup | null
     perims: import('leaflet').LayerGroup | null
     water: import('leaflet').LayerGroup | null
@@ -48,6 +68,7 @@ export function useFireMapDynamicLayers(opts: {
   }>({
     weather: null,
     wind: null,
+    airQuality: null,
     roads: null,
     perims: null,
     water: null,
@@ -64,6 +85,7 @@ export function useFireMapDynamicLayers(opts: {
     const g = groupsRef.current
     g.weather = L.layerGroup().addTo(map)
     g.wind = L.layerGroup().addTo(map)
+    g.airQuality = L.layerGroup().addTo(map)
     g.roads = L.layerGroup().addTo(map)
     g.perims = L.layerGroup().addTo(map)
     g.water = L.layerGroup().addTo(map)
@@ -74,12 +96,13 @@ export function useFireMapDynamicLayers(opts: {
 
     return () => {
       const gg = groupsRef.current
-      const layers = [gg.weather, gg.wind, gg.roads, gg.perims, gg.water, gg.emergency, gg.cameras, gg.crew]
+      const layers = [gg.weather, gg.wind, gg.airQuality, gg.roads, gg.perims, gg.water, gg.emergency, gg.cameras, gg.crew]
       for (const layer of layers) {
         if (layer && map.hasLayer(layer)) map.removeLayer(layer)
       }
       gg.weather = null
       gg.wind = null
+      gg.airQuality = null
       gg.roads = null
       gg.perims = null
       gg.water = null
@@ -97,6 +120,7 @@ export function useFireMapDynamicLayers(opts: {
       !bundle ||
       !g.weather ||
       !g.wind ||
+      !g.airQuality ||
       !g.roads ||
       !g.perims ||
       !g.water ||
@@ -107,6 +131,7 @@ export function useFireMapDynamicLayers(opts: {
       return
     const weatherG = g.weather
     const windG = g.wind
+    const airG = g.airQuality
     const roadsG = g.roads
     const perimsG = g.perims
     const waterG = g.water
@@ -175,6 +200,60 @@ export function useFireMapDynamicLayers(opts: {
     } else {
       weatherG.clearLayers()
       windG.clearLayers()
+    }
+
+    airG.clearLayers()
+    if (activeLayers.airQuality) {
+      try {
+        const res = await fetch(`/api/map/air-quality?${qs.toString()}`)
+        const data = (await res.json()) as {
+          sites?: Array<{
+            lat: number
+            lng: number
+            aqi: number | null
+            parameter: string | null
+            category: string | null
+            siteName: string | null
+            observedUtc: string | null
+          }>
+          error?: string
+        }
+        if (!res.ok && data.error) {
+          console.warn('AirNow:', data.error)
+        }
+        const sites = data.sites || []
+        for (const p of sites) {
+          const fill = aqiMarkerColor(p.aqi)
+          const stroke = p.aqi != null && p.aqi > 100 ? '#1e293b' : '#334155'
+          const cm = L.circleMarker([p.lat, p.lng], {
+            radius: 8,
+            fillColor: fill,
+            color: stroke,
+            weight: 2,
+            fillOpacity: 0.9,
+          })
+          const title = p.siteName ? escapeHtml(p.siteName) : 'Air monitor'
+          const aqiLabel = p.aqi != null ? String(Math.round(p.aqi)) : '—'
+          const cat = p.category ? escapeHtml(p.category) : ''
+          const param = p.parameter ? escapeHtml(p.parameter) : 'PM2.5'
+          const when = p.observedUtc ? escapeHtml(p.observedUtc) : ''
+          cm.bindPopup(
+            `<div style="font-size:12px;line-height:1.35;max-width:220px;">
+              <strong>${title}</strong><br/>
+              <span style="color:${stroke}">${param}: AQI <strong>${aqiLabel}</strong>${cat ? ` · ${cat}` : ''}</span>
+              ${when ? `<br/><span style="font-size:11px;color:#64748b">${when} UTC</span>` : ''}
+              <p style="font-size:10px;color:#94a3b8;margin:8px 0 0;">Preliminary AirNow data — not for regulation.</p>
+            </div>`,
+          )
+          cm.bindTooltip(`AQI ${aqiLabel}${cat ? ` · ${cat}` : ''}`, {
+            direction: 'top',
+            className: 'leaflet-tooltip-dark',
+          })
+          cm.addTo(airG)
+        }
+      } catch (e) {
+        console.warn('AirNow layer failed', e)
+      }
     }
 
     if (activeLayers.roadClosures) {

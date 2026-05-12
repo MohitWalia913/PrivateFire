@@ -537,6 +537,13 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
                       active={!!activeLayers.windField}
                       onToggle={() => toggleLayer('windField')}
                     />
+                    <LayerToggleRow
+                      label="Air quality (AirNow)"
+                      desc="EPA PM2.5 monitors in view — requires AIRNOW_API_KEY on server"
+                      color="#16a34a"
+                      active={!!activeLayers.airQuality}
+                      onToggle={() => toggleLayer('airQuality')}
+                    />
                   </div>
 
                   <div className="p-3 border-b border-gray-100">
@@ -630,7 +637,11 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
                       ,{' '}
                       <a href="https://services.gis.ca.gov" target="_blank" rel="noreferrer" className="text-orange-500 hover:underline">CA GIS</a>
                       , Cal OES, Open-Meteo, OpenStreetMap contributors, Esri Living Atlas, NASA GIBS.
-                      {' '}Verify evacuation and closures with official county / Caltrans channels before operations.
+                      {' '}                      Verify evacuation and closures with official county / Caltrans channels before operations.
+                      {' '}
+                      Air quality from{' '}
+                      <a href="https://www.airnow.gov/" target="_blank" rel="noreferrer" className="text-orange-500 hover:underline">EPA AirNow</a>
+                      {' '}(when enabled) is preliminary and not for regulatory use.
                     </p>
                   </div>
                 </div>
@@ -728,6 +739,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
                   {[
                     { id: 'weatherGrid', label: 'Weather grid' },
                     { id: 'windField', label: 'Wind' },
+                    { id: 'airQuality', label: 'Air quality' },
                     { id: 'roadClosures', label: 'Road closures' },
                     { id: 'activeFirePerimeters', label: 'Active perimeters' },
                     { id: 'waterSources', label: 'Water sources' },

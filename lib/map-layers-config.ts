@@ -29,6 +29,7 @@ export interface WmsLayerConfig {
 export const OVERLAY_LAYER_IDS = [
   'weatherGrid',
   'windField',
+  'airQuality',
   'roadClosures',
   'activeFirePerimeters',
   'waterSources',
