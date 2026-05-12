@@ -30,6 +30,7 @@ export const OVERLAY_LAYER_IDS = [
   'weatherGrid',
   'windField',
   'airQuality',
+  'airQualityContours',
   'roadClosures',
   'activeFirePerimeters',
   'waterSources',

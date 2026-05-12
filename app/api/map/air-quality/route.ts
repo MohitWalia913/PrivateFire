@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { normalizeAirNowBbox } from '@/lib/map-bbox'
+import { fetchForecastSitesForBBox, type ForecastAgg } from '@/lib/airnow-forecast'
 
 /** @see https://github.com/briandconnelly/airnow — AirNow bbox query shape */
 const AIRNOW_DATA_URL = 'https://www.airnowapi.org/aq/data/'
@@ -12,6 +13,12 @@ export type AirQualitySite = {
   category: string | null
   siteName: string | null
   observedUtc: string | null
+  kind: 'observation' | 'forecast'
+  reportingArea?: string | null
+  stateCode?: string | null
+  forecastDate?: string | null
+  /** Human-readable PM2.5 / O₃ lines when kind === forecast */
+  forecastSummary?: string | null
 }
 
 function num(r: Record<string, unknown>, ...keys: string[]): number | null {
@@ -58,9 +65,9 @@ function airNowUtcHourRange(): { startdate: string; enddate: string } {
   return { startdate: fmt(start), enddate: fmt(end) }
 }
 
-function parseAirNowPayload(raw: unknown): AirQualitySite[] {
+function parseAirNowPayload(raw: unknown): Omit<AirQualitySite, 'kind'>[] {
   const rows = extractObservationRows(raw)
-  const out: AirQualitySite[] = []
+  const out: Omit<AirQualitySite, 'kind'>[] = []
   for (const item of rows) {
     if (!item || typeof item !== 'object') continue
     const r = item as Record<string, unknown>
@@ -81,12 +88,46 @@ function parseAirNowPayload(raw: unknown): AirQualitySite[] {
   return out
 }
 
+function forecastAggToSites(agg: Map<string, ForecastAgg>, forecastDayUtc: string): AirQualitySite[] {
+  const out: AirQualitySite[] = []
+  for (const a of agg.values()) {
+    const parts: string[] = []
+    if (a.pm25 && a.pm25.aqi >= 0) parts.push(`PM2.5 ${a.pm25.aqi} (${a.pm25.cat})`)
+    if (a.o3 && a.o3.aqi >= 0) parts.push(`O₃ ${a.o3.aqi} (${a.o3.cat})`)
+    if (parts.length === 0) continue
+
+    const aqis = [a.pm25?.aqi, a.o3?.aqi].filter((x): x is number => x != null && x >= 0)
+    const worst = Math.max(...aqis)
+    let cat = ''
+    if (a.pm25 && worst === a.pm25.aqi) cat = a.pm25.cat
+    else if (a.o3 && worst === a.o3.aqi) cat = a.o3.cat
+
+    out.push({
+      kind: 'forecast',
+      lat: a.lat,
+      lng: a.lng,
+      aqi: worst,
+      parameter: 'Forecast',
+      category: cat || null,
+      siteName: a.reportingArea,
+      observedUtc: null,
+      reportingArea: a.reportingArea,
+      stateCode: a.stateCode || null,
+      forecastDate: forecastDayUtc,
+      forecastSummary: parts.join(' · '),
+    })
+  }
+  return out
+}
+
 export async function GET(req: NextRequest) {
   const apiKey = process.env.AIRNOW_API_KEY?.trim()
   if (!apiKey) {
     return NextResponse.json(
       {
         sites: [] as AirQualitySite[],
+        observations: [] as AirQualitySite[],
+        forecasts: [] as AirQualitySite[],
         attribution: 'Air quality: U.S. EPA AirNow — preliminary observations, not for regulatory use.',
       },
       { status: 503 },
@@ -119,7 +160,6 @@ export async function GET(req: NextRequest) {
   }
 
   type Attempt = { parameters: string; useUtcHours: boolean }
-  /** Uppercase pollutant codes match EPA ACT docs; lowercase matches older samples. Hours often required for /aq/data/. */
   const attempts: Attempt[] = [
     { parameters: 'PM25', useUtcHours: true },
     { parameters: 'pm25', useUtcHours: true },
@@ -168,6 +208,8 @@ export async function GET(req: NextRequest) {
         error: `AirNow error ${upstreamStatus}`,
         detail: bodyText.slice(0, 800),
         sites: [] as AirQualitySite[],
+        observations: [] as AirQualitySite[],
+        forecasts: [] as AirQualitySite[],
       },
       { status: clientStatus },
     )
@@ -182,28 +224,53 @@ export async function GET(req: NextRequest) {
         error: 'Invalid JSON from AirNow',
         detail: bodyText.slice(0, 300),
         sites: [] as AirQualitySite[],
+        observations: [] as AirQualitySite[],
+        forecasts: [] as AirQualitySite[],
       },
       { status: 502 },
     )
   }
 
-  const rawSites = parseAirNowPayload(raw)
+  const rawObs = parseAirNowPayload(raw)
   const byKey = new Map<string, AirQualitySite>()
-  for (const s of rawSites) {
-    const key = `${s.lat.toFixed(4)},${s.lng.toFixed(4)}`
+  for (const o of rawObs) {
+    const site: AirQualitySite = { ...o, kind: 'observation' }
+    const key = `${site.lat.toFixed(4)},${site.lng.toFixed(4)}`
     const prev = byKey.get(key)
     const prevAqi = prev?.aqi ?? -1
-    const nextAqi = s.aqi ?? -1
-    if (!prev || nextAqi >= prevAqi) byKey.set(key, s)
+    const nextAqi = site.aqi ?? -1
+    if (!prev || nextAqi >= prevAqi) byKey.set(key, site)
   }
-  const sites = [...byKey.values()]
+  const observations = [...byKey.values()]
+
+  const forecastDayUtc = new Date().toISOString().slice(0, 10)
+  let forecasts: AirQualitySite[] = []
+  try {
+    const agg = await fetchForecastSitesForBBox({
+      south,
+      west,
+      north,
+      east,
+      apiKey,
+      headers,
+      grid: 3,
+    })
+    forecasts = forecastAggToSites(agg, forecastDayUtc)
+  } catch {
+    forecasts = []
+  }
+
+  const sites = [...observations, ...forecasts]
 
   return NextResponse.json({
-    attribution: 'Air quality: U.S. EPA AirNow — preliminary observations, not for regulatory use.',
+    attribution:
+      'Air quality: U.S. EPA AirNow — observations (/aq/data/) and forecast reporting areas (/aq/forecast/latLong/). Preliminary; not for regulatory use.',
     disclaimer:
-      'AirNow data are preliminary. See https://www.airnow.gov/ and https://docs.airnowapi.org/ .',
+      'AirNow data are preliminary. See https://www.airnow.gov/ and https://docs.airnowapi.org/webservices .',
     generatedAt: new Date().toISOString(),
     bbox: { south, west, north, east },
+    observations,
+    forecasts,
     sites,
   })
 }

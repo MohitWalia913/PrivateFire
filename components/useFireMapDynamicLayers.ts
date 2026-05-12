@@ -57,6 +57,7 @@ export function useFireMapDynamicLayers(opts: {
   const { mapObjRef, isMapReady, activeLayers, incidents, crewBlurMeters, crewOnlyDuringActiveFire } = opts
 
   const groupsRef = useRef<{
+    airContours: import('leaflet').LayerGroup | null
     weather: import('leaflet').LayerGroup | null
     wind: import('leaflet').LayerGroup | null
     airQuality: import('leaflet').LayerGroup | null
@@ -67,6 +68,7 @@ export function useFireMapDynamicLayers(opts: {
     cameras: import('leaflet').LayerGroup | null
     crew: import('leaflet').LayerGroup | null
   }>({
+    airContours: null,
     weather: null,
     wind: null,
     airQuality: null,
@@ -84,6 +86,7 @@ export function useFireMapDynamicLayers(opts: {
     if (!mapObjRef.current || !isMapReady || initedRef.current) return
     const { map, L } = mapObjRef.current
     const g = groupsRef.current
+    g.airContours = L.layerGroup().addTo(map)
     g.weather = L.layerGroup().addTo(map)
     g.wind = L.layerGroup().addTo(map)
     g.airQuality = L.layerGroup().addTo(map)
@@ -97,10 +100,22 @@ export function useFireMapDynamicLayers(opts: {
 
     return () => {
       const gg = groupsRef.current
-      const layers = [gg.weather, gg.wind, gg.airQuality, gg.roads, gg.perims, gg.water, gg.emergency, gg.cameras, gg.crew]
+      const layers = [
+        gg.airContours,
+        gg.weather,
+        gg.wind,
+        gg.airQuality,
+        gg.roads,
+        gg.perims,
+        gg.water,
+        gg.emergency,
+        gg.cameras,
+        gg.crew,
+      ]
       for (const layer of layers) {
         if (layer && map.hasLayer(layer)) map.removeLayer(layer)
       }
+      gg.airContours = null
       gg.weather = null
       gg.wind = null
       gg.airQuality = null
@@ -119,6 +134,7 @@ export function useFireMapDynamicLayers(opts: {
     const g = groupsRef.current
     if (
       !bundle ||
+      !g.airContours ||
       !g.weather ||
       !g.wind ||
       !g.airQuality ||
@@ -130,6 +146,7 @@ export function useFireMapDynamicLayers(opts: {
       !g.crew
     )
       return
+    const contoursG = g.airContours
     const weatherG = g.weather
     const windG = g.wind
     const airG = g.airQuality
@@ -203,6 +220,45 @@ export function useFireMapDynamicLayers(opts: {
       windG.clearLayers()
     }
 
+    contoursG.clearLayers()
+    if (activeLayers.airQualityContours) {
+      try {
+        const cb = normalizeAirNowBbox({ south, west, north, east })
+        const cq = new URLSearchParams({
+          south: String(cb.south),
+          west: String(cb.west),
+          north: String(cb.north),
+          east: String(cb.east),
+        })
+        const res = await fetch(`/api/map/air-quality-contours?${cq.toString()}`)
+        const data = (await res.json()) as { type?: string; features?: unknown[] }
+        const features = Array.isArray(data.features) ? data.features : []
+        L.geoJSON({ type: 'FeatureCollection', features } as never, {
+          style: feat => {
+            const pol = (feat?.properties as { pollutant?: string } | undefined)?.pollutant
+            if (pol === 'O3') {
+              return {
+                color: '#6d28d9',
+                weight: 1.5,
+                opacity: 0.65,
+                fillColor: '#ddd6fe',
+                fillOpacity: 0.14,
+              }
+            }
+            return {
+              color: '#c2410c',
+              weight: 1.5,
+              opacity: 0.65,
+              fillColor: '#fdba74',
+              fillOpacity: 0.14,
+            }
+          },
+        }).addTo(contoursG)
+      } catch (e) {
+        console.warn('AirNow contours failed', e)
+      }
+    }
+
     airG.clearLayers()
     if (activeLayers.airQuality) {
       try {
@@ -223,6 +279,10 @@ export function useFireMapDynamicLayers(opts: {
             category: string | null
             siteName: string | null
             observedUtc: string | null
+            kind?: 'observation' | 'forecast'
+            stateCode?: string | null
+            forecastDate?: string | null
+            forecastSummary?: string | null
           }>
           error?: string
         }
@@ -233,31 +293,57 @@ export function useFireMapDynamicLayers(opts: {
         for (const p of sites) {
           const fill = aqiMarkerColor(p.aqi)
           const stroke = p.aqi != null && p.aqi > 100 ? '#1e293b' : '#334155'
-          const cm = L.circleMarker([p.lat, p.lng], {
-            radius: 8,
-            fillColor: fill,
-            color: stroke,
-            weight: 2,
-            fillOpacity: 0.9,
-          })
-          const title = p.siteName ? escapeHtml(p.siteName) : 'Air monitor'
+          const isForecast = p.kind === 'forecast'
+          const title = p.siteName ? escapeHtml(p.siteName) : isForecast ? 'Forecast area' : 'Air monitor'
           const aqiLabel = p.aqi != null ? String(Math.round(p.aqi)) : '—'
           const cat = p.category ? escapeHtml(p.category) : ''
           const param = p.parameter ? escapeHtml(p.parameter) : 'PM2.5'
           const when = p.observedUtc ? escapeHtml(p.observedUtc) : ''
-          cm.bindPopup(
-            `<div style="font-size:12px;line-height:1.35;max-width:220px;">
+          const summary = p.forecastSummary ? escapeHtml(p.forecastSummary) : ''
+          const fDate = p.forecastDate ? escapeHtml(p.forecastDate) : ''
+
+          if (isForecast) {
+            const m = L.marker([p.lat, p.lng], {
+              icon: L.divIcon({
+                className: '',
+                html: `<div style="width:13px;height:13px;background:${fill};border:2px solid ${stroke};transform:rotate(45deg);box-sizing:border-box;box-shadow:0 1px 3px rgba(0,0,0,.25);"></div>`,
+                iconSize: [13, 13],
+                iconAnchor: [6.5, 6.5],
+              }),
+            })
+            m.bindPopup(
+              `<div style="font-size:12px;line-height:1.35;max-width:240px;">
+              <strong>${title}</strong>${p.stateCode ? ` <span style="color:#64748b">${escapeHtml(p.stateCode)}</span>` : ''}<br/>
+              <span style="color:${stroke}">Worst-case forecast AQI <strong>${aqiLabel}</strong>${cat ? ` · ${cat}` : ''}</span>
+              ${summary ? `<br/><span style="font-size:11px;color:#475569">${summary}</span>` : ''}
+              ${fDate ? `<br/><span style="font-size:11px;color:#64748b">Issued for ${fDate}</span>` : ''}
+              <p style="font-size:10px;color:#94a3b8;margin:8px 0 0;">EPA reporting-area forecast — preliminary.</p>
+            </div>`,
+            )
+            m.bindTooltip(`Forecast · AQI ${aqiLabel}`, { direction: 'top', className: 'leaflet-tooltip-dark' })
+            m.addTo(airG)
+          } else {
+            const cm = L.circleMarker([p.lat, p.lng], {
+              radius: 8,
+              fillColor: fill,
+              color: stroke,
+              weight: 2,
+              fillOpacity: 0.9,
+            })
+            cm.bindPopup(
+              `<div style="font-size:12px;line-height:1.35;max-width:220px;">
               <strong>${title}</strong><br/>
               <span style="color:${stroke}">${param}: AQI <strong>${aqiLabel}</strong>${cat ? ` · ${cat}` : ''}</span>
               ${when ? `<br/><span style="font-size:11px;color:#64748b">${when} UTC</span>` : ''}
-              <p style="font-size:10px;color:#94a3b8;margin:8px 0 0;">Preliminary AirNow data — not for regulation.</p>
+              <p style="font-size:10px;color:#94a3b8;margin:8px 0 0;">Preliminary monitor observation — not for regulation.</p>
             </div>`,
-          )
-          cm.bindTooltip(`AQI ${aqiLabel}${cat ? ` · ${cat}` : ''}`, {
-            direction: 'top',
-            className: 'leaflet-tooltip-dark',
-          })
-          cm.addTo(airG)
+            )
+            cm.bindTooltip(`Obs · AQI ${aqiLabel}${cat ? ` · ${cat}` : ''}`, {
+              direction: 'top',
+              className: 'leaflet-tooltip-dark',
+            })
+            cm.addTo(airG)
+          }
         }
       } catch (e) {
         console.warn('AirNow layer failed', e)

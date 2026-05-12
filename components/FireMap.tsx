@@ -539,10 +539,17 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
                     />
                     <LayerToggleRow
                       label="Air quality (AirNow)"
-                      desc="PM2.5 monitors near what you're viewing (EPA AirNow)"
+                      desc="Monitor observations + forecast reporting areas (lat/long grid)"
                       color="#16a34a"
                       active={!!activeLayers.airQuality}
                       onToggle={() => toggleLayer('airQuality')}
+                    />
+                    <LayerToggleRow
+                      label="AQ contours (O₃ / PM2.5)"
+                      desc="EPA KML contours for current UTC hour — subtle fills under markers"
+                      color="#9333ea"
+                      active={!!activeLayers.airQualityContours}
+                      onToggle={() => toggleLayer('airQualityContours')}
                     />
                   </div>
 
@@ -641,7 +648,8 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
                       {' '}
                       Air quality from{' '}
                       <a href="https://www.airnow.gov/" target="_blank" rel="noreferrer" className="text-orange-500 hover:underline">EPA AirNow</a>
-                      {' '}(when enabled) is preliminary and not for regulatory use.
+                      {' '}
+                      (observations, forecasts, optional contours — preliminary).
                     </p>
                   </div>
                 </div>
@@ -740,6 +748,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
                     { id: 'weatherGrid', label: 'Weather grid' },
                     { id: 'windField', label: 'Wind' },
                     { id: 'airQuality', label: 'Air quality' },
+                    { id: 'airQualityContours', label: 'AQ contours' },
                     { id: 'roadClosures', label: 'Road closures' },
                     { id: 'activeFirePerimeters', label: 'Active perimeters' },
                     { id: 'waterSources', label: 'Water sources' },
