@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 import type { CalFireIncident } from '@/lib/calfire'
 import { FIRE_CAMERA_SITES } from '@/lib/fire-camera-sites'
+import { normalizeAirNowBbox } from '@/lib/map-bbox'
 
 type MapBundle = {
   map: import('leaflet').Map
@@ -205,7 +206,14 @@ export function useFireMapDynamicLayers(opts: {
     airG.clearLayers()
     if (activeLayers.airQuality) {
       try {
-        const res = await fetch(`/api/map/air-quality?${qs.toString()}`)
+        const aqBox = normalizeAirNowBbox({ south, west, north, east })
+        const airQs = new URLSearchParams({
+          south: String(aqBox.south),
+          west: String(aqBox.west),
+          north: String(aqBox.north),
+          east: String(aqBox.east),
+        })
+        const res = await fetch(`/api/map/air-quality?${airQs.toString()}`)
         const data = (await res.json()) as {
           sites?: Array<{
             lat: number

@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { normalizeAirNowBbox } from '@/lib/map-bbox'
 
 /** @see https://github.com/briandconnelly/airnow — AirNow bbox query shape */
 const AIRNOW_DATA_URL = 'https://www.airnowapi.org/aq/data/'
-
-/** Max span to limit cost / payload (US West default view is well under this). */
-const MAX_SPAN_DEG = 22
 
 export type AirQualitySite = {
   lat: number
@@ -61,30 +59,29 @@ export async function GET(req: NextRequest) {
   if (!apiKey) {
     return NextResponse.json(
       {
-        error: 'AIRNOW_API_KEY is not set',
         sites: [] as AirQualitySite[],
-        attribution: 'EPA AirNow (not configured)',
+        attribution: 'Air quality: U.S. EPA AirNow — preliminary observations, not for regulatory use.',
       },
       { status: 503 },
     )
   }
 
   const sp = req.nextUrl.searchParams
-  const south = Number(sp.get('south'))
-  const west = Number(sp.get('west'))
-  const north = Number(sp.get('north'))
-  const east = Number(sp.get('east'))
+  const southIn = Number(sp.get('south'))
+  const westIn = Number(sp.get('west'))
+  const northIn = Number(sp.get('north'))
+  const eastIn = Number(sp.get('east'))
 
-  if (![south, west, north, east].every(n => Number.isFinite(n)) || south >= north || west >= east) {
+  if (![southIn, westIn, northIn, eastIn].every(n => Number.isFinite(n))) {
     return NextResponse.json({ error: 'Invalid bbox: need south, west, north, east' }, { status: 400 })
   }
 
-  if (north - south > MAX_SPAN_DEG || east - west > MAX_SPAN_DEG) {
-    return NextResponse.json(
-      { error: `Viewport too large (max ~${MAX_SPAN_DEG}° per axis). Zoom in for AirNow monitors.` },
-      { status: 400 },
-    )
-  }
+  const { south, west, north, east } = normalizeAirNowBbox({
+    south: southIn,
+    west: westIn,
+    north: northIn,
+    east: eastIn,
+  })
 
   const bbox = `${west},${south},${east},${north}`
   const u = new URL(AIRNOW_DATA_URL)

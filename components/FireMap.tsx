@@ -13,7 +13,7 @@ import ContactModal from './ContactModal'
 import { useFireMapDynamicLayers } from '@/components/useFireMapDynamicLayers'
 import {
   Flame, AlertTriangle, RefreshCw, ChevronLeft, ChevronRight,
-  X, MapPin, Layers, Eye, EyeOff
+  X, MapPin, Layers, Eye, EyeOff, Gauge,
 } from 'lucide-react'
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -539,7 +539,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
                     />
                     <LayerToggleRow
                       label="Air quality (AirNow)"
-                      desc="EPA PM2.5 monitors in view — requires AIRNOW_API_KEY on server"
+                      desc="PM2.5 monitors near what you're viewing (EPA AirNow)"
                       color="#16a34a"
                       active={!!activeLayers.airQuality}
                       onToggle={() => toggleLayer('airQuality')}
@@ -781,6 +781,22 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
         <button onClick={fetchIncidents}
           className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs font-medium border bg-white/95 border-gray-200 text-gray-500 hover:text-orange-500 backdrop-blur-sm transition-all shadow-sm">
           <RefreshCw size={12} />
+        </button>
+
+        {/* Air quality (AirNow) — quick toggle */}
+        <button
+          type="button"
+          title={activeLayers.airQuality ? 'Hide EPA AirNow monitors' : 'Show EPA AirNow monitors on map'}
+          onClick={() => toggleLayer('airQuality')}
+          aria-pressed={!!activeLayers.airQuality}
+          className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs font-medium border backdrop-blur-sm transition-all shadow-sm ${
+            activeLayers.airQuality
+              ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+              : 'bg-white/95 border-gray-200 text-gray-600 hover:border-emerald-300'
+          }`}
+        >
+          <Gauge size={12} className={activeLayers.airQuality ? 'text-emerald-600' : 'text-gray-500'} />
+          <span className="hidden sm:inline">Air Quality</span>
         </button>
 
         {/* Active filter */}
