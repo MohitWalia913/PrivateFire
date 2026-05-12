@@ -31,8 +31,35 @@ function str(r: Record<string, unknown>, ...keys: string[]): string | null {
   return null
 }
 
+function extractObservationRows(raw: unknown): unknown[] {
+  if (Array.isArray(raw)) return raw
+  if (raw && typeof raw === 'object') {
+    const o = raw as Record<string, unknown>
+    for (const k of ['data', 'Data', 'observations', 'Observations', 'results', 'Results']) {
+      const v = o[k]
+      if (Array.isArray(v)) return v
+    }
+  }
+  return []
+}
+
+/** AirNow expects UTC hour bounds like 2026-05-12T14 (see ACT / docs.airnowapi.org). */
+function airNowUtcHourRange(): { startdate: string; enddate: string } {
+  const end = new Date()
+  end.setUTCMinutes(0, 0, 0)
+  const start = new Date(end.getTime() - 2 * 3600 * 1000)
+  const fmt = (d: Date) => {
+    const y = d.getUTCFullYear()
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+    const day = String(d.getUTCDate()).padStart(2, '0')
+    const h = String(d.getUTCHours()).padStart(2, '0')
+    return `${y}-${m}-${day}T${h}`
+  }
+  return { startdate: fmt(start), enddate: fmt(end) }
+}
+
 function parseAirNowPayload(raw: unknown): AirQualitySite[] {
-  const rows = Array.isArray(raw) ? raw : []
+  const rows = extractObservationRows(raw)
   const out: AirQualitySite[] = []
   for (const item of rows) {
     if (!item || typeof item !== 'object') continue
@@ -84,43 +111,80 @@ export async function GET(req: NextRequest) {
   })
 
   const bbox = `${west},${south},${east},${north}`
-  const u = new URL(AIRNOW_DATA_URL)
-  u.searchParams.set('bbox', bbox)
-  u.searchParams.set('parameters', 'pm25')
-  u.searchParams.set('monitortype', '0')
-  u.searchParams.set('datatype', 'B')
-  u.searchParams.set('format', 'application/json')
-  u.searchParams.set('verbose', '1')
-  u.searchParams.set('includerawconcentrations', '0')
-  u.searchParams.set('api_key', apiKey)
+  const { startdate, enddate } = airNowUtcHourRange()
 
-  let res: Response
-  try {
-    res = await fetch(u.toString(), {
-      headers: { Accept: 'application/json' },
-      next: { revalidate: 300 },
-    })
-  } catch {
-    return NextResponse.json({ error: 'AirNow request failed (network)' }, { status: 502 })
+  const headers = {
+    Accept: 'application/json',
+    'User-Agent': 'PrivateFire/1.0 (+https://www.privatefire.com map proxy)',
   }
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
+  type Attempt = { parameters: string; useUtcHours: boolean }
+  /** Uppercase pollutant codes match EPA ACT docs; lowercase matches older samples. Hours often required for /aq/data/. */
+  const attempts: Attempt[] = [
+    { parameters: 'PM25', useUtcHours: true },
+    { parameters: 'pm25', useUtcHours: true },
+    { parameters: 'PM25', useUtcHours: false },
+    { parameters: 'pm25', useUtcHours: false },
+  ]
+
+  let bodyText = ''
+  let upstreamStatus = 502
+
+  for (const a of attempts) {
+    const u = new URL(AIRNOW_DATA_URL)
+    u.searchParams.set('bbox', bbox)
+    u.searchParams.set('parameters', a.parameters)
+    u.searchParams.set('monitortype', '0')
+    u.searchParams.set('datatype', 'B')
+    u.searchParams.set('format', 'application/json')
+    u.searchParams.set('verbose', '1')
+    u.searchParams.set('includerawconcentrations', '0')
+    if (a.useUtcHours) {
+      u.searchParams.set('startdate', startdate)
+      u.searchParams.set('enddate', enddate)
+    }
+    u.searchParams.set('api_key', apiKey)
+
+    try {
+      const r = await fetch(u.toString(), { headers, cache: 'no-store' })
+      bodyText = await r.text()
+      upstreamStatus = r.status
+      if (r.ok) break
+      if (r.status !== 400 && r.status !== 404 && r.status !== 422) break
+    } catch {
+      bodyText = 'network error'
+      upstreamStatus = 502
+      break
+    }
+  }
+
+  const upstreamOk = upstreamStatus >= 200 && upstreamStatus < 300
+
+  if (!upstreamOk) {
+    const clientStatus =
+      upstreamStatus === 401 || upstreamStatus === 403 ? upstreamStatus : upstreamStatus === 429 ? 429 : 502
     return NextResponse.json(
       {
-        error: `AirNow error ${res.status}`,
-        detail: text.slice(0, 500),
+        error: `AirNow error ${upstreamStatus}`,
+        detail: bodyText.slice(0, 800),
         sites: [] as AirQualitySite[],
       },
-      { status: 502 },
+      { status: clientStatus },
     )
   }
 
   let raw: unknown
   try {
-    raw = await res.json()
+    raw = JSON.parse(bodyText) as unknown
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON from AirNow' }, { status: 502 })
+    return NextResponse.json(
+      {
+        error: 'Invalid JSON from AirNow',
+        detail: bodyText.slice(0, 300),
+        sites: [] as AirQualitySite[],
+      },
+      { status: 502 },
+    )
   }
 
   const rawSites = parseAirNowPayload(raw)
