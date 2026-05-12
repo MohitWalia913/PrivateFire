@@ -102,6 +102,49 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
     return n
   }, [activeLayers])
 
+  /** Legend for Weather & Wind / Air toggles — color dots match sidebar */
+  const weatherAirLegend = useMemo(() => {
+    const rows: { id: string; label: string; hint: string; color: string }[] = []
+    if (activeLayers.weatherGrid) {
+      rows.push({
+        id: 'wg',
+        label: 'Weather grid',
+        hint: 'Open-Meteo · °F & humidity (viewport sample)',
+        color: '#38bdf8',
+      })
+    }
+    if (activeLayers.windField) {
+      rows.push({
+        id: 'wf',
+        label: 'Wind field',
+        hint: 'Open-Meteo · speed & direction arrows',
+        color: '#475569',
+      })
+    }
+    if (activeLayers.airQuality) {
+      rows.push({
+        id: 'aq',
+        label: 'Air quality',
+        hint: 'EPA AirNow · shaded disks + contours',
+        color: '#16a34a',
+      })
+    }
+    if (activeLayers.airQualityContours) {
+      rows.push({
+        id: 'co',
+        label: 'AQ contours',
+        hint: 'EPA AirNow KML · O₃ & PM2.5 area fills',
+        color: '#9333ea',
+      })
+    }
+    return rows
+  }, [
+    activeLayers.weatherGrid,
+    activeLayers.windField,
+    activeLayers.airQuality,
+    activeLayers.airQualityContours,
+  ])
+
   // ── Fetch incidents ────────────────────────────────────────────────────
 
   const fetchIncidents = useCallback(async () => {
@@ -847,6 +890,36 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
           className="absolute top-4 left-4 z-20 bg-white/95 backdrop-blur-sm border border-gray-200 hover:border-orange-400 shadow-sm rounded-lg px-3 py-2 flex items-center gap-2 text-xs text-gray-700 hover:text-orange-500 transition-all">
           <Flame size={13} className="text-orange-500" /> Fire Data
         </button>
+      )}
+
+      {/* ── Weather / air overlay legend (highlights active layers + sources) ── */}
+      {weatherAirLegend.length > 0 && (
+        <div
+          className={`absolute z-20 max-w-[260px] rounded-xl border border-gray-200 bg-white/95 backdrop-blur-sm shadow-md ${
+            compact ? 'bottom-20 right-2 text-[10px] px-2.5 py-2' : 'bottom-28 right-4 text-[11px] px-3 py-2.5'
+          }`}
+          role="status"
+          aria-label="Active weather and air map overlays"
+        >
+          <p className="font-bold uppercase tracking-wide text-gray-500 mb-1.5 border-b border-gray-100 pb-1">
+            Weather & air on map
+          </p>
+          <ul className="space-y-1.5">
+            {weatherAirLegend.map(row => (
+              <li key={row.id} className="flex items-start gap-2">
+                <span
+                  className="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white shadow-sm"
+                  style={{ backgroundColor: row.color }}
+                  aria-hidden
+                />
+                <span>
+                  <span className="font-semibold text-gray-900">{row.label}</span>
+                  <span className="block text-gray-500 leading-snug">{row.hint}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {/* ── Bottom bar ── */}
