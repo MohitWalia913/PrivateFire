@@ -302,9 +302,9 @@ export function useFireMapDynamicLayers(opts: {
         } else {
           airG.clearLayers()
           const sites = data.sites || []
-          const hasContourFill = contourFeatureCount > 0
-          const radiusObs = hasContourFill ? 9000 : 20000
-          const radiusFc = hasContourFill ? 12000 : 26000
+          /** Region-wide AQI reads best from EPA contour polygons; stations stay as compact pins. */
+          const obsRadius = 6
+          const fcRadius = 8
 
           for (const p of sites) {
             const fill = aqiMarkerColor(p.aqi)
@@ -318,18 +318,18 @@ export function useFireMapDynamicLayers(opts: {
             const summary = p.forecastSummary ? escapeHtml(p.forecastSummary) : ''
             const fDate = p.forecastDate ? escapeHtml(p.forecastDate) : ''
 
-            const disk = L.circle([p.lat, p.lng], {
-              radius: isForecast ? radiusFc : radiusObs,
+            const pin = L.circleMarker([p.lat, p.lng], {
+              radius: isForecast ? fcRadius : obsRadius,
               fillColor: fill,
               color: stroke,
               weight: isForecast ? 2 : 1.5,
-              opacity: 0.9,
-              fillOpacity: hasContourFill ? 0.28 : 0.45,
-              dashArray: isForecast ? '10 8' : undefined,
+              opacity: 1,
+              fillOpacity: 0.92,
+              dashArray: isForecast ? '4 3' : undefined,
             })
 
             if (isForecast) {
-              disk.bindPopup(
+              pin.bindPopup(
                 `<div style="font-size:12px;line-height:1.35;max-width:240px;">
               <strong>${title}</strong>${p.stateCode ? ` <span style="color:#64748b">${escapeHtml(p.stateCode)}</span>` : ''}<br/>
               <span style="color:${stroke}">Worst-case forecast AQI <strong>${aqiLabel}</strong>${cat ? ` · ${cat}` : ''}</span>
@@ -338,25 +338,25 @@ export function useFireMapDynamicLayers(opts: {
               <p style="font-size:10px;color:#94a3b8;margin:8px 0 0;">EPA reporting-area forecast — preliminary.</p>
             </div>`,
               )
-              disk.bindTooltip(`Forecast · AQI ${aqiLabel}`, {
+              pin.bindTooltip(`Forecast · AQI ${aqiLabel}`, {
                 direction: 'top',
                 className: 'leaflet-tooltip-dark',
               })
             } else {
-              disk.bindPopup(
+              pin.bindPopup(
                 `<div style="font-size:12px;line-height:1.35;max-width:220px;">
               <strong>${title}</strong><br/>
               <span style="color:${stroke}">${param}: AQI <strong>${aqiLabel}</strong>${cat ? ` · ${cat}` : ''}</span>
               ${when ? `<br/><span style="font-size:11px;color:#64748b">${when} UTC</span>` : ''}
-              <p style="font-size:10px;color:#94a3b8;margin:8px 0 0;">Approximate influence area — preliminary monitor reading.</p>
+              <p style="font-size:10px;color:#94a3b8;margin:8px 0 0;">Monitor location — regional smoke/AQI from shaded contours when enabled.</p>
             </div>`,
               )
-              disk.bindTooltip(`Observation · AQI ${aqiLabel}${cat ? ` · ${cat}` : ''}`, {
+              pin.bindTooltip(`Observation · AQI ${aqiLabel}${cat ? ` · ${cat}` : ''}`, {
                 direction: 'top',
                 className: 'leaflet-tooltip-dark',
               })
             }
-            disk.addTo(airG)
+            pin.addTo(airG)
           }
         }
       } catch (e) {

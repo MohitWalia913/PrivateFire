@@ -13,7 +13,7 @@ import ContactModal from './ContactModal'
 import { useFireMapDynamicLayers } from '@/components/useFireMapDynamicLayers'
 import {
   Flame, AlertTriangle, RefreshCw, ChevronLeft, ChevronRight,
-  X, MapPin, Layers, Eye, EyeOff, Gauge,
+  X, MapPin, Layers, Eye, EyeOff, Gauge, Satellite, Mountain, MapPinned,
 } from 'lucide-react'
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -61,6 +61,13 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
     L: unknown
     /** Isolate CAL FIRE pins so refresh never strips AirNow / weather overlays */
     fireIncidentsLayer?: import('leaflet').LayerGroup
+    /** Approximate incident footprint highlight when a fire is selected from the sidebar */
+    selectionHighlightLayer?: import('leaflet').LayerGroup
+    baseLayers?: {
+      streets: import('leaflet').TileLayer
+      satellite: import('leaflet').TileLayer
+      terrain: import('leaflet').TileLayer
+    }
   } | null>(null)
   const wmsLayerRefs = useRef<Record<string, unknown>>({})
   const heatLayerRef = useRef<unknown>(null)
@@ -80,6 +87,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
   const [crewOnlyDuringActiveFire, setCrewOnlyDuringActiveFire] = useState(true)
   const [showLayerDropdown, setShowLayerDropdown] = useState(false)
   const [isMapReady, setIsMapReady] = useState(false)
+  const [basemap, setBasemap] = useState<'streets' | 'satellite' | 'terrain'>('streets')
 
   const visibleIncidents = activeOnly ? incidents.filter(i => i.IsActive) : incidents
 
@@ -125,7 +133,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
       rows.push({
         id: 'aq',
         label: 'Air quality',
-        hint: 'EPA AirNow · shaded disks + contours',
+        hint: 'EPA AirNow · contour fills + compact pins',
         color: '#16a34a',
       })
     }
@@ -181,6 +189,69 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
     crewOnlyDuringActiveFire,
   })
 
+  /** Rough radius (meters) for “selected fire” highlight from reported acres (circular proxy). */
+  const acresToApproxRadiusM = useCallback((acres: number) => {
+    const a = Math.max(1, acres || 800)
+    const r = Math.sqrt((a * 4046.86) / Math.PI)
+    return Math.min(48000, Math.max(1400, r))
+  }, [])
+
+  useEffect(() => {
+    if (!mapObjRef.current?.baseLayers || !isMapReady) return
+    const { map, baseLayers } = mapObjRef.current as {
+      map: import('leaflet').Map
+      baseLayers: {
+        streets: import('leaflet').TileLayer
+        satellite: import('leaflet').TileLayer
+        terrain: import('leaflet').TileLayer
+      }
+    }
+    const active =
+      basemap === 'satellite' ? baseLayers.satellite : basemap === 'terrain' ? baseLayers.terrain : baseLayers.streets
+    for (const layer of Object.values(baseLayers)) {
+      if (layer === active) {
+        if (!map.hasLayer(layer)) layer.addTo(map)
+      } else if (map.hasLayer(layer)) {
+        map.removeLayer(layer)
+      }
+    }
+  }, [basemap, isMapReady])
+
+  useEffect(() => {
+    if (!mapObjRef.current || !isMapReady) return
+    const { L, selectionHighlightLayer } = mapObjRef.current as {
+      L: typeof import('leaflet')
+      selectionHighlightLayer?: import('leaflet').LayerGroup
+    }
+    const hl = selectionHighlightLayer
+    if (!hl) return
+    hl.clearLayers()
+    if (!selected?.Latitude || !selected?.Longitude) return
+    const r = acresToApproxRadiusM(selected.AcresBurned || 0)
+    const circle = L.circle([selected.Latitude, selected.Longitude], {
+      radius: r,
+      color: '#c2410c',
+      weight: 3,
+      dashArray: '12 10',
+      fillColor: '#fb923c',
+      fillOpacity: 0.14,
+    })
+    circle.bindTooltip(`${selected.Name} — approximate extent from reported acres (not official perimeter)`, {
+      className: 'leaflet-tooltip-dark',
+      direction: 'top',
+      sticky: true,
+    })
+    circle.addTo(hl)
+  }, [selected, isMapReady, acresToApproxRadiusM])
+
+  const flyToIncident = useCallback((lat: number, lng: number, acres?: number) => {
+    if (!mapObjRef.current) return
+    const map = mapObjRef.current.map as import('leaflet').Map
+    const a = acres ?? 0
+    const z = a > 120_000 ? 9 : a > 40_000 ? 10 : a > 8000 ? 11 : a > 1200 ? 12 : 13
+    map.flyTo([lat, lng], z, { duration: 1.25 })
+  }, [])
+
   // ── EFFECT 1: Init map + create all WMS layers ─────────────────────────
 
   useEffect(() => {
@@ -205,12 +276,26 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
       })
 
       const fireIncidentsLayer = L.layerGroup().addTo(map)
+      const selectionHighlightLayer = L.layerGroup().addTo(map)
 
-      // Base tile layer
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      const streets = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
         attribution: '© OpenStreetMap © CARTO',
-        maxZoom: 19,
-      }).addTo(map)
+        maxZoom: 20,
+      })
+      const satellite = L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        {
+          attribution: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics',
+          maxZoom: 19,
+        },
+      )
+      const terrain = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors © OpenTopoMap',
+        maxZoom: 17,
+      })
+      streets.addTo(map)
+
+      const baseLayers = { streets, satellite, terrain }
 
       if (!compact) L.control.zoom({ position: 'bottomright' }).addTo(map)
 
@@ -260,7 +345,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
         }
       } catch { /* optional */ }
 
-      if (!cancelled) mapObjRef.current = { map, L, fireIncidentsLayer }
+      if (!cancelled) mapObjRef.current = { map, L, fireIncidentsLayer, selectionHighlightLayer, baseLayers }
       if (!cancelled) setIsMapReady(true)
     }
 
@@ -285,15 +370,12 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
 
   useEffect(() => {
     if (!mapObjRef.current || !isMapReady) return
-    const { map, L, fireIncidentsLayer } = mapObjRef.current as {
-      map: {
-        flyTo: (c: [number, number], z: number, o: object) => void
-      }
+    const { L, fireIncidentsLayer } = mapObjRef.current as {
       L: {
         marker: (c: [number, number], o: object) => {
           on: (e: string, fn: () => void) => unknown
           bindTooltip: (c: string, o: object) => unknown
-          addTo: (m: unknown) => void
+          addTo: (m: unknown) => unknown
         }
         divIcon: (o: object) => unknown
       }
@@ -308,16 +390,19 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
 
     if (!activeLayers.activeFires) return
 
-    visibleIncidents.forEach(inc => {
+    visibleIncidents.forEach((inc, idx) => {
       if (!inc.Latitude || !inc.Longitude) return
       const c = inc.PercentContained || 0
-      const color = c === 0 ? '#dc2626' : c < 25 ? '#ef4444' : c < 75 ? '#f97316' : '#22c55e'
-      const size = c < 25 ? 22 : 16
+      const fill = c === 0 ? '#dc2626' : c < 25 ? '#ef4444' : c < 75 ? '#f97316' : '#22c55e'
+      const isSel = !!(selected && selected.UniqueId === inc.UniqueId)
+      const size = isSel ? 28 : c < 25 ? 22 : 18
+      const fid = `pf_${String(inc.UniqueId || idx).replace(/[^a-zA-Z0-9_-]/g, '')}`
+
+      const flameSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true"><defs><filter id="${fid}" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="1" stdDeviation="1.2" flood-color="#000" flood-opacity=".35"/></filter></defs><g filter="url(#${fid})"><path fill="${fill}" stroke="${isSel ? '#fef08a' : 'rgba(255,255,255,.92)'}" stroke-width="${isSel ? 2.2 : 1.5}" d="M12 2s-3 4.2-3 8a3 3 0 1 0 6 0c0-1.6-.6-3.4-1.5-5 2.7 2.2 4.5 5.5 4.5 9a5.5 5.5 0 1 1-11 0c0-3.3 1.5-6 4-8C10 5 12 2 12 2z"/></g></svg>`
 
       const icon = L.divIcon({
         className: '',
-        html: `<div style="width:${size}px;height:${size}px;background:${color};border:2px solid ${c < 25 ? '#fbbf24' : 'rgba(255,255,255,0.6)'};border-radius:50%;box-shadow:0 0 ${c < 25 ? 14 : 6}px ${color}AA;cursor:pointer;"></div>`,
-        // @ts-ignore iconSize
+        html: `<div style="width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;cursor:pointer;">${flameSvg}</div>`,
         iconSize: [size, size],
         iconAnchor: [size / 2, size / 2],
       })
@@ -329,7 +414,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
           setSelected(inc)
           setSidebarOpen(true)
           setSidebarTab('fires')
-          map.flyTo([inc.Latitude, inc.Longitude], 11, { duration: 1 })
+          flyToIncident(inc.Latitude, inc.Longitude, inc.AcresBurned)
         })
       }
 
@@ -339,7 +424,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
       )
       marker.addTo(fg)
     })
-  }, [visibleIncidents, compact, activeLayers.activeFires, isMapReady])
+  }, [visibleIncidents, compact, activeLayers.activeFires, isMapReady, selected, flyToIncident])
 
   // ── EFFECT 3: Toggle heatmap ───────────────────────────────────────────
 
@@ -390,13 +475,6 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
     }
   }
 
-  const flyTo = (lat: number, lng: number) => {
-    if (!mapObjRef.current) return
-    // @ts-ignore
-    mapObjRef.current.map.flyTo([lat, lng], 11, { duration: 1.2 })
-  }
-
-  // ── Render ────────────────────────────────────────────────────────────
 
   return (
     <div className="relative w-full h-full flex overflow-hidden">
@@ -498,9 +576,13 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
                     {visibleIncidents.map((fire, i) => {
                       const c = fire.PercentContained || 0
                       return (
-                        <button key={i}
-                          onClick={() => { setSelected(fire); flyTo(fire.Latitude, fire.Longitude) }}
-                          className={`w-full text-left px-4 py-3 border-b border-gray-100 hover:bg-orange-50 transition-colors flex items-start gap-3 ${selected?.Name === fire.Name ? 'bg-orange-50' : ''}`}>
+                        <button
+                          key={fire.UniqueId || `${fire.Name}-${i}`}
+                          onClick={() => {
+                            setSelected(fire)
+                            flyToIncident(fire.Latitude, fire.Longitude, fire.AcresBurned)
+                          }}
+                          className={`w-full text-left px-4 py-3 border-b border-gray-100 hover:bg-orange-50 transition-colors flex items-start gap-3 ${selected?.UniqueId === fire.UniqueId ? 'bg-orange-50 ring-1 ring-inset ring-orange-200' : ''}`}>
                           <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1.5 ${c === 0 ? 'bg-red-600' : c < 25 ? 'bg-red-400' : c < 75 ? 'bg-orange-400' : 'bg-green-400'}`} />
                           <div className="min-w-0 flex-1">
                             <p className="text-gray-900 text-xs font-semibold truncate">{fire.Name}</p>
@@ -516,9 +598,12 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
                   <div className="p-3 border-t border-gray-200 flex-shrink-0 bg-gray-50">
                     <p className="text-xs text-gray-400 mb-2 font-medium uppercase tracking-wide">Marker Legend</p>
                     <div className="flex gap-3 text-xs text-gray-600 flex-wrap">
-                      <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-600 inline-block border-2 border-yellow-400" />Critical</span>
-                      <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-orange-400 inline-block" />Active</span>
-                      <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-green-400 inline-block" />Contained</span>
+                      <span className="flex items-center gap-1.5">
+                        <Flame size={14} className="text-red-600 shrink-0" />
+                        Critical / active fire (selected grows & yellow ring)
+                      </span>
+                      <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-orange-400 inline-block" />Lower containment</span>
+                      <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-green-400 inline-block" />Higher containment</span>
                     </div>
                   </div>
                 </>
@@ -586,7 +671,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
                     />
                     <LayerToggleRow
                       label="Air quality (AirNow)"
-                      desc="EPA contours + shaded zones around monitors & forecasts (auto-loads map fills)"
+                      desc="EPA contour fills (regions) + compact monitor pins — toggle AQ contours for O₃/PM2.5 only"
                       color="#16a34a"
                       active={!!activeLayers.airQuality}
                       onToggle={() => toggleLayer('airQuality')}
@@ -890,6 +975,39 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
           className="absolute top-4 left-4 z-20 bg-white/95 backdrop-blur-sm border border-gray-200 hover:border-orange-400 shadow-sm rounded-lg px-3 py-2 flex items-center gap-2 text-xs text-gray-700 hover:text-orange-500 transition-all">
           <Flame size={13} className="text-orange-500" /> Fire Data
         </button>
+      )}
+
+      {/* ── Basemap (streets / satellite / terrain) ── */}
+      {!compact && isMapReady && (
+        <div
+          className={`absolute z-20 flex flex-col gap-0.5 rounded-xl border border-gray-200 bg-white/95 p-1.5 shadow-md backdrop-blur-sm transition-[left] duration-300 ${
+            sidebarOpen ? 'left-[21rem]' : 'left-4'
+          } bottom-32`}
+          role="group"
+          aria-label="Basemap"
+        >
+          <p className="px-1.5 text-[9px] font-bold uppercase tracking-wide text-gray-400">Base</p>
+          <div className="flex gap-1">
+            {[
+              { id: 'streets' as const, short: 'Map', Icon: MapPinned },
+              { id: 'satellite' as const, short: 'Sat', Icon: Satellite },
+              { id: 'terrain' as const, short: 'Topo', Icon: Mountain },
+            ].map(({ id, short, Icon }) => (
+              <button
+                key={id}
+                type="button"
+                title={`${short} basemap`}
+                onClick={() => setBasemap(id)}
+                className={`flex flex-col items-center gap-0.5 rounded-lg px-2 py-1 text-[9px] font-semibold transition-colors ${
+                  basemap === id ? 'bg-orange-100 text-orange-900' : 'text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                <Icon size={15} strokeWidth={basemap === id ? 2.25 : 2} />
+                {short}
+              </button>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* ── Weather / air overlay legend (highlights active layers + sources) ── */}
