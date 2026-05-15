@@ -4,30 +4,15 @@ import { useEffect, useRef, useCallback } from 'react'
 import type { CalFireIncident } from '@/lib/calfire'
 import { FIRE_CAMERA_SITES } from '@/lib/fire-camera-sites'
 import { normalizeAirNowBbox } from '@/lib/map-bbox'
+import {
+  airQualityLucideMarkerHtml,
+  weatherTemperatureMarkerHtml,
+  weatherWindLucideMarkerHtml,
+} from '@/lib/leaflet-lucide-markers'
 
 type MapBundle = {
   map: import('leaflet').Map
   L: typeof import('leaflet')
-}
-
-function tempColor(f: number | null): string {
-  if (f == null || Number.isNaN(f)) return '#94a3b8'
-  if (f < 32) return '#3b82f6'
-  if (f < 55) return '#22c55e'
-  if (f < 75) return '#eab308'
-  if (f < 90) return '#f97316'
-  return '#dc2626'
-}
-
-/** EPA AQI category colors (approximate swatches used on AirNow). */
-function aqiMarkerColor(aqi: number | null): string {
-  if (aqi == null || Number.isNaN(aqi)) return '#94a3b8'
-  if (aqi <= 50) return '#00e400'
-  if (aqi <= 100) return '#ffff00'
-  if (aqi <= 150) return '#ff7e00'
-  if (aqi <= 200) return '#ff0000'
-  if (aqi <= 300) return '#8f3f97'
-  return '#7e0023'
 }
 
 function escapeHtml(s: string): string {
@@ -187,28 +172,29 @@ export function useFireMapDynamicLayers(opts: {
       const grid = data.grid || []
       for (const p of grid) {
         if (activeLayers.weatherGrid) {
-          const cm = L.circleMarker([p.lat, p.lng], {
-            radius: 7,
-            fillColor: tempColor(p.temperatureF),
-            color: '#fff',
-            weight: 1,
-            fillOpacity: 0.85,
+          const wm = L.marker([p.lat, p.lng], {
+            icon: L.divIcon({
+              className: '',
+              html: weatherTemperatureMarkerHtml(p.temperatureF),
+              iconSize: [26, 26],
+              iconAnchor: [13, 13],
+            }),
           })
-          cm.bindTooltip(
+          wm.bindTooltip(
             `${p.temperatureF != null ? `${Math.round(p.temperatureF)}°F` : '—'} · ${
               p.humidityPct != null ? `${Math.round(p.humidityPct)}% RH` : '—'
             }`,
             { direction: 'top', className: 'leaflet-tooltip-dark' },
           )
-          cm.addTo(weatherG)
+          wm.addTo(weatherG)
         }
         if (activeLayers.windField && p.windMph != null && p.windDeg != null) {
           const arrow = L.marker([p.lat, p.lng], {
             icon: L.divIcon({
               className: '',
-              html: `<div style="transform:rotate(${p.windDeg}deg);font-size:18px;line-height:1;width:24px;text-align:center;color:#0f172a;">➤</div>`,
-              iconSize: [24, 24],
-              iconAnchor: [12, 12],
+              html: weatherWindLucideMarkerHtml(p.windDeg),
+              iconSize: [30, 30],
+              iconAnchor: [15, 15],
             }),
           })
           arrow.bindTooltip(`${Math.round(p.windMph)} mph @ ${Math.round(p.windDeg)}°`, { direction: 'right' })
@@ -300,12 +286,8 @@ export function useFireMapDynamicLayers(opts: {
         } else {
           airG.clearLayers()
           const sites = data.sites || []
-          /** Region-wide AQI reads best from EPA contour polygons; stations stay as compact pins. */
-          const obsRadius = 6
-          const fcRadius = 8
 
           for (const p of sites) {
-            const fill = aqiMarkerColor(p.aqi)
             const stroke = p.aqi != null && p.aqi > 100 ? '#1e293b' : '#334155'
             const isForecast = p.kind === 'forecast'
             const title = p.siteName ? escapeHtml(p.siteName) : isForecast ? 'Forecast area' : 'Air monitor'
@@ -316,14 +298,15 @@ export function useFireMapDynamicLayers(opts: {
             const summary = p.forecastSummary ? escapeHtml(p.forecastSummary) : ''
             const fDate = p.forecastDate ? escapeHtml(p.forecastDate) : ''
 
-            const pin = L.circleMarker([p.lat, p.lng], {
-              radius: isForecast ? fcRadius : obsRadius,
-              fillColor: fill,
-              color: stroke,
-              weight: isForecast ? 2 : 1.5,
-              opacity: 1,
-              fillOpacity: 0.92,
-              dashArray: isForecast ? '4 3' : undefined,
+            const box = isForecast ? 30 : 26
+            const anchor = box / 2
+            const pin = L.marker([p.lat, p.lng], {
+              icon: L.divIcon({
+                className: '',
+                html: airQualityLucideMarkerHtml(p.aqi, isForecast),
+                iconSize: [box, box],
+                iconAnchor: [anchor, anchor],
+              }),
             })
 
             if (isForecast) {

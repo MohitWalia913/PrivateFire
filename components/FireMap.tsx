@@ -119,7 +119,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
       rows.push({
         id: 'wg',
         label: 'Weather grid',
-        hint: 'Open-Meteo · °F & humidity (viewport sample)',
+        hint: 'Open-Meteo · thermometer badges + humidity tooltip',
         color: '#38bdf8',
       })
     }
@@ -127,7 +127,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
       rows.push({
         id: 'wf',
         label: 'Wind field',
-        hint: 'Open-Meteo · speed & direction arrows',
+        hint: 'Open-Meteo · Lucide wind icons rotated to heading',
         color: '#475569',
       })
     }
@@ -135,7 +135,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
       rows.push({
         id: 'aq',
         label: 'Air quality',
-        hint: 'EPA AirNow · contour fills + compact pins',
+        hint: 'EPA AirNow · Lucide icons by AQI band + contour fills',
         color: '#16a34a',
       })
     }
@@ -753,7 +753,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
                     />
                     <LayerToggleRow
                       label="Air quality (AirNow)"
-                      desc="EPA contour fills (regions) + compact monitor pins — toggle AQ contours for O₃/PM2.5 only"
+                      desc="EPA AQI-colored badges (Leaf → Cloud/Sun → Fog → Alert → Skull by tier); contours underneath."
                       color="#16a34a"
                       active={!!activeLayers.airQuality}
                       onToggle={() => toggleLayer('airQuality')}
