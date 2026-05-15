@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
   const cookieOpts = authCookieOptions()
 
   /** Single response object so Set-Cookie from exchange merges into the redirect */
-  let response = NextResponse.redirect(new URL(nextPath, origin))
+  const response = NextResponse.redirect(new URL(nextPath, origin))
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     ...(cookieOpts ? { cookieOptions: cookieOpts } : {}),

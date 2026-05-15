@@ -221,7 +221,6 @@ export function useFireMapDynamicLayers(opts: {
     }
 
     contoursG.clearLayers()
-    let contourFeatureCount = 0
     const loadAirNowContours =
       activeLayers.airQuality || activeLayers.airQualityContours
 
@@ -237,7 +236,6 @@ export function useFireMapDynamicLayers(opts: {
         const res = await fetch(`/api/map/air-quality-contours?${cq.toString()}`)
         const data = (await res.json()) as { type?: string; features?: unknown[] }
         const features = Array.isArray(data.features) ? data.features : []
-        contourFeatureCount = features.length
         if (features.length > 0) {
           const emphasisAir = !!(loadAirNowContours && activeLayers.airQuality)
           L.geoJSON({ type: 'FeatureCollection', features } as never, {
@@ -478,7 +476,10 @@ export function useFireMapDynamicLayers(opts: {
   }, [activeLayers, incidents, crewBlurMeters, crewOnlyDuringActiveFire])
 
   const refreshRef = useRef(refresh)
-  refreshRef.current = refresh
+
+  useEffect(() => {
+    refreshRef.current = refresh
+  }, [refresh])
 
   useEffect(() => {
     if (!isMapReady || !initedRef.current) return

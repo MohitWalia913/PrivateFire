@@ -8,6 +8,20 @@ import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { getAlertSettings, getUserProfile, upsertAlertSettings } from '@/lib/supabase/user-data'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 
+function AlertToggle({ on, onClick }: { on: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`relative w-11 h-6 rounded-full transition-colors ${on ? 'bg-orange-500' : 'bg-gray-200'}`}
+    >
+      <span
+        className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${on ? 'left-[22px]' : 'left-0.5'}`}
+      />
+    </button>
+  )
+}
+
 export default function AlertSettingsPage() {
   const router = useRouter()
   const [user, setUser] = useState<SupabaseUser | null>(null)
@@ -62,7 +76,7 @@ export default function AlertSettingsPage() {
     }
 
     checkAuth()
-  }, [])
+  }, [router])
 
   const save = async () => {
     if (!user) return
@@ -83,13 +97,6 @@ export default function AlertSettingsPage() {
       setSaveError(err instanceof Error ? err.message : 'Unable to save alert settings.')
     }
   }
-
-  const Toggle = ({ on, onClick }: { on: boolean; onClick: () => void }) => (
-    <button onClick={onClick}
-      className={`relative w-11 h-6 rounded-full transition-colors ${on ? 'bg-orange-500' : 'bg-gray-200'}`}>
-      <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${on ? 'left-[22px]' : 'left-0.5'}`} />
-    </button>
-  )
 
   if (loading) return (
     <div className="min-h-screen bg-[#f8f7f5] flex items-center justify-center">
@@ -181,7 +188,7 @@ export default function AlertSettingsPage() {
                   <p className="text-gray-500 text-xs">{user?.email}</p>
                 </div>
               </div>
-              <Toggle on={emailAlerts} onClick={() => setEmailAlerts(v => !v)} />
+              <AlertToggle on={emailAlerts} onClick={() => setEmailAlerts(v => !v)} />
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -193,7 +200,7 @@ export default function AlertSettingsPage() {
                   <p className="text-gray-500 text-xs">{phone || 'Add phone number in profile'}</p>
                 </div>
               </div>
-              <Toggle on={smsAlerts} onClick={() => setSmsAlerts(v => !v)} />
+              <AlertToggle on={smsAlerts} onClick={() => setSmsAlerts(v => !v)} />
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -205,7 +212,7 @@ export default function AlertSettingsPage() {
                   <p className="text-gray-500 text-xs">Via Private Fire app</p>
                 </div>
               </div>
-              <Toggle on={pushAlerts} onClick={() => setPushAlerts(v => !v)} />
+              <AlertToggle on={pushAlerts} onClick={() => setPushAlerts(v => !v)} />
             </div>
           </div>
         </div>

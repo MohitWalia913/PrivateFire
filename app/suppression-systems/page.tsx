@@ -6,7 +6,6 @@ import {
   CheckCircle,
   ArrowRight,
   Droplets,
-  Home,
   Leaf,
   Wind,
   Info,

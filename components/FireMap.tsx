@@ -172,7 +172,7 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
   }, [])
 
   useEffect(() => {
-    void fetchIncidents()
+    queueMicrotask(() => void fetchIncidents())
     const timer = setInterval(() => {
       void fetchIncidents()
     }, CALFIRE_REFRESH_MS)
@@ -335,8 +335,8 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
       await import('leaflet/dist/leaflet.css')
       if (cancelled || !mapRef.current || mapReadyRef.current) return
 
-      // @ts-ignore internal leaflet property
-      delete mapRef.current._leaflet_id
+      // Leaflet stores `_leaflet_id` on the container — clear before re-init
+      Reflect.deleteProperty(mapRef.current as object, '_leaflet_id')
 
       mapReadyRef.current = true
       const map = L.map(mapRef.current, {
@@ -402,9 +402,12 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
       // Heatmap layer
       try {
         await import('leaflet.heat')
+        type LeafletWithHeat = typeof L & {
+          heatLayer: (pts: [number, number, number][], opts: Record<string, unknown>) => import('leaflet').Layer
+        }
+        const LH = L as LeafletWithHeat
         if (!cancelled) {
-          // @ts-ignore leaflet.heat
-          const heatLayer = L.heatLayer([], {
+          const heatLayer = LH.heatLayer([], {
             radius: compact ? 28 : 40,
             blur: 25,
             maxZoom: 10,
@@ -428,12 +431,10 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
       wmsLayerRefs.current = {}
       heatLayerRef.current = null
       if (mapObjRef.current) {
-        // @ts-ignore
-        mapObjRef.current.map.remove()
+        ;(mapObjRef.current.map as import('leaflet').Map).remove()
         mapObjRef.current = null
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compact])
 
   // ── EFFECT 2: Add/remove incident markers ──────────────────────────────
@@ -521,8 +522,8 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
         item.Longitude,
         Math.min(1, ((item.AcresBurned || 0) / 5000) + ((100 - (item.PercentContained || 0)) / 100) * 0.5),
       ] as [number, number, number])
-    // @ts-ignore leaflet.heat runtime method
-    if (typeof heatLayerRef.current.setLatLngs === 'function') heatLayerRef.current.setLatLngs(heatPoints)
+    const layer = heatLayerRef.current as { setLatLngs?: (pts: [number, number, number][]) => void } | null
+    layer?.setLatLngs?.(heatPoints)
   }, [visibleIncidents])
 
   // ── Toggle handler ────────────────────────────────────────────────────

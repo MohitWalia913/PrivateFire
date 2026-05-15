@@ -13,7 +13,7 @@ import type { User as SupabaseUser } from '@supabase/supabase-js'
 
 export default function ApplyPage() {
   const [user, setUser] = useState<SupabaseUser | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [, setLoading] = useState(true)
   const [zip, setZip] = useState('')
   const [zipChecked, setZipChecked] = useState(false)
   const [available, setAvailable] = useState(false)
@@ -163,7 +163,7 @@ export default function ApplyPage() {
               Apply for Fire Protection
             </h1>
             <p className="text-gray-600 max-w-xl mx-auto text-base leading-relaxed">
-              Tell us about your property and we'll match you with the right private fire protection plan. Start by checking if we cover your area.
+              Tell us about your property and we&apos;ll match you with the right private fire protection plan. Start by checking if we cover your area.
             </p>
           </div>
 

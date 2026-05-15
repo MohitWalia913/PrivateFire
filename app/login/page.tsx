@@ -20,7 +20,7 @@ export default function LoginPage() {
   useEffect(() => {
     const errorParam = new URLSearchParams(window.location.search).get('error')
     if (errorParam) {
-      setError(errorParam)
+      queueMicrotask(() => setError(errorParam))
     }
   }, [])
 

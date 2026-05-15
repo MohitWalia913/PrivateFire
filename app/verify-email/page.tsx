@@ -12,7 +12,7 @@ export default function VerifyEmailPage() {
 
   useEffect(() => {
     const emailParam = new URLSearchParams(window.location.search).get('email') ?? ''
-    setEmail(emailParam)
+    queueMicrotask(() => setEmail(emailParam))
   }, [])
 
   const handleResend = async () => {

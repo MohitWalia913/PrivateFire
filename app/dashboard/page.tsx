@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import { Flame, Shield, Phone, MapPin, Bell, AlertTriangle, CheckCircle, Clock, TrendingUp, LogOut, User, ChevronRight, Zap, Home, FileText, Plus } from 'lucide-react'
+import { Flame, Shield, Phone, MapPin, Bell, AlertTriangle, CheckCircle, Clock, LogOut, User, ChevronRight, Zap, Home, FileText, Plus } from 'lucide-react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { CALFIRE_REFRESH_MS, computeRiskScore, fetchCalFireList, haversineMiles, toRelativeTime } from '@/lib/calfire'
 import { geocodeAddress, geocodeZip } from '@/lib/geocode'
@@ -45,6 +45,9 @@ export default function DashboardPage() {
     color: 'text-yellow-600',
   })
   const [monitoringLabel, setMonitoringLabel] = useState('Monitoring California incidents')
+
+  const [coverageStatus, setCoverageStatus] = useState<'not_covered' | 'pending' | 'active'>('not_covered')
+  const [addresses, setAddresses] = useState<{ label: string; address: string; city: string; state: string; zip: string }[]>([])
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -153,16 +156,14 @@ export default function DashboardPage() {
     })
 
     return () => subscription?.unsubscribe()
-  }, [])
+  }, [router])
 
-  const [coverageStatus, setCoverageStatus] = useState<'not_covered' | 'pending' | 'active'>('not_covered')
   const coverageStatusConfig = {
     not_covered: { label: 'Not Covered', color: 'text-gray-500', bg: 'text-gray-400' },
     pending: { label: 'Pending Review', color: 'text-yellow-600', bg: 'text-yellow-500' },
     active: { label: 'Active', color: 'text-green-600', bg: 'text-green-500' },
   }
 
-  const [addresses, setAddresses] = useState<{ label: string; address: string; city: string; state: string; zip: string }[]>([])
   const hasAddress = addresses.length > 0
   const canShowRiskLevel = hasSubmittedApplication && Boolean(addresses[0]?.zip)
 

@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
     merged = mergeFeatures(merged, airNowKmlToFeatureCollection(ozoneXml, 'O3'))
   }
 
-  let pmXml =
+  const pmXml =
     (await fetchContourKml('PM25', bboxStr, dateHour, apiKey)) ??
     (await fetchContourKml('PM2.5', bboxStr, dateHour, apiKey))
   if (pmXml?.includes('<')) {

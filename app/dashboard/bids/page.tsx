@@ -103,7 +103,7 @@ export default function MyApplicationPage() {
     }
 
     checkAuth()
-  }, [])
+  }, [router])
 
   useEffect(() => {
     if (!isEditing) return
@@ -111,7 +111,7 @@ export default function MyApplicationPage() {
     const zip = form.zip.replace(/\D/g, '').slice(0, 5)
     if (zip.length !== 5) {
       lastFetchedZipRef.current = ''
-      setZipLookup('idle')
+      queueMicrotask(() => setZipLookup('idle'))
       return
     }
 

@@ -66,7 +66,7 @@ export default function EditProfilePage() {
     }
 
     checkAuth()
-  }, [])
+  }, [router])
 
   const saveProfile = async () => {
     if (!user) return
