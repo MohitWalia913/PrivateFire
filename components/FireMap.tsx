@@ -11,6 +11,8 @@ import {
 } from '@/lib/map-layers-config'
 import ContactModal from './ContactModal'
 import { useFireMapDynamicLayers } from '@/components/useFireMapDynamicLayers'
+import { pickMatchingPerimeter } from '@/lib/wildfire-perimeter-match'
+import { flameMarkerHtml, priorityMarkerStyle } from '@/lib/fire-incident-marker'
 import {
   Flame, AlertTriangle, RefreshCw, ChevronLeft, ChevronRight,
   X, MapPin, Layers, Eye, EyeOff, Gauge, Satellite, Mountain, MapPinned,
@@ -218,30 +220,98 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
   }, [basemap, isMapReady])
 
   useEffect(() => {
-    if (!mapObjRef.current || !isMapReady) return
-    const { L, selectionHighlightLayer } = mapObjRef.current as {
+    const bundle = mapObjRef.current as {
       L: typeof import('leaflet')
+      map: import('leaflet').Map
       selectionHighlightLayer?: import('leaflet').LayerGroup
-    }
-    const hl = selectionHighlightLayer
-    if (!hl) return
+    } | null
+    const hl = bundle?.selectionHighlightLayer
+    if (!bundle || !hl || !isMapReady) return
+
+    let cancelled = false
     hl.clearLayers()
+
     if (!selected?.Latitude || !selected?.Longitude) return
-    const r = acresToApproxRadiusM(selected.AcresBurned || 0)
-    const circle = L.circle([selected.Latitude, selected.Longitude], {
-      radius: r,
-      color: '#c2410c',
-      weight: 3,
-      dashArray: '12 10',
-      fillColor: '#fb923c',
-      fillOpacity: 0.14,
-    })
-    circle.bindTooltip(`${selected.Name} — approximate extent from reported acres (not official perimeter)`, {
-      className: 'leaflet-tooltip-dark',
-      direction: 'top',
-      sticky: true,
-    })
-    circle.addTo(hl)
+
+    const { L, map } = bundle
+
+    const drawFallbackCircle = () => {
+      if (cancelled) return
+      const r = acresToApproxRadiusM(selected.AcresBurned || 0)
+      const circle = L.circle([selected.Latitude, selected.Longitude], {
+        radius: r,
+        color: '#c2410c',
+        weight: 3,
+        dashArray: '12 10',
+        fillColor: '#fb923c',
+        fillOpacity: 0.14,
+      })
+      circle.bindTooltip(
+        `${selected.Name} — approximate extent from acres (no perimeter polygon matched here; zoom in or verify upstream feed).`,
+        { className: 'leaflet-tooltip-dark', direction: 'top', sticky: true },
+      )
+      circle.addTo(hl)
+    }
+
+    void (async () => {
+      const pad = 0.42
+      const qs = new URLSearchParams({
+        south: String(selected.Latitude - pad),
+        west: String(selected.Longitude - pad),
+        north: String(selected.Latitude + pad),
+        east: String(selected.Longitude + pad),
+      })
+
+      let picked: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon> | null = null
+      try {
+        const res = await fetch(`/api/map/wildfire-perimeters?${qs}`)
+        const data = (await res.json()) as GeoJSON.FeatureCollection
+        const feats = Array.isArray(data?.features) ? data.features : []
+        picked = pickMatchingPerimeter(feats, selected)?.feature ?? null
+      } catch {
+        picked = null
+      }
+
+      if (cancelled || !mapObjRef.current?.selectionHighlightLayer) return
+
+      if (picked) {
+        const gj = L.geoJSON(picked as never, {
+          style: {
+            color: '#c2410c',
+            weight: 3,
+            dashArray: '12 10',
+            fillColor: '#fb923c',
+            fillOpacity: 0.22,
+          },
+          onEachFeature: (_feat, layer) => {
+            layer.bindTooltip(
+              `${selected.Name} — mapped wildfire perimeter (Esri Living Atlas; verify with official ICS maps).`,
+              { className: 'leaflet-tooltip-dark', direction: 'top', sticky: true },
+            )
+          },
+        })
+        gj.addTo(hl)
+        try {
+          const b = gj.getBounds()
+          if (b?.isValid?.()) {
+            map.fitBounds(b, {
+              padding: [52, 52],
+              maxZoom: 15,
+              animate: true,
+              duration: 0.85,
+            })
+          }
+        } catch {
+          /* bounds unavailable */
+        }
+      } else {
+        drawFallbackCircle()
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
   }, [selected, isMapReady, acresToApproxRadiusM])
 
   const flyToIncident = useCallback((lat: number, lng: number, acres?: number) => {
@@ -390,21 +460,21 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
 
     if (!activeLayers.activeFires) return
 
-    visibleIncidents.forEach((inc, idx) => {
+    visibleIncidents.forEach(inc => {
       if (!inc.Latitude || !inc.Longitude) return
       const c = inc.PercentContained || 0
-      const fill = c === 0 ? '#dc2626' : c < 25 ? '#ef4444' : c < 75 ? '#f97316' : '#22c55e'
       const isSel = !!(selected && selected.UniqueId === inc.UniqueId)
-      const size = isSel ? 28 : c < 25 ? 22 : 18
-      const fid = `pf_${String(inc.UniqueId || idx).replace(/[^a-zA-Z0-9_-]/g, '')}`
-
-      const flameSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true"><defs><filter id="${fid}" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="1" stdDeviation="1.2" flood-color="#000" flood-opacity=".35"/></filter></defs><g filter="url(#${fid})"><path fill="${fill}" stroke="${isSel ? '#fef08a' : 'rgba(255,255,255,.92)'}" stroke-width="${isSel ? 2.2 : 1.5}" d="M12 2s-3 4.2-3 8a3 3 0 1 0 6 0c0-1.6-.6-3.4-1.5-5 2.7 2.2 4.5 5.5 4.5 9a5.5 5.5 0 1 1-11 0c0-3.3 1.5-6 4-8C10 5 12 2 12 2z"/></g></svg>`
+      const sty = priorityMarkerStyle(inc, isSel)
 
       const icon = L.divIcon({
         className: '',
-        html: `<div style="width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;cursor:pointer;">${flameSvg}</div>`,
-        iconSize: [size, size],
-        iconAnchor: [size / 2, size / 2],
+        html: flameMarkerHtml(sty.size, {
+          fill: sty.fill,
+          ring: sty.ring,
+          strokeWidth: sty.strokeWidth,
+        }),
+        iconSize: [sty.size, sty.size],
+        iconAnchor: [sty.size / 2, sty.size / 2],
       })
 
       const marker = L.marker([inc.Latitude, inc.Longitude], { icon })
@@ -596,14 +666,25 @@ export default function FireMap({ compact = false }: { compact?: boolean }) {
 
                   {/* Legend */}
                   <div className="p-3 border-t border-gray-200 flex-shrink-0 bg-gray-50">
-                    <p className="text-xs text-gray-400 mb-2 font-medium uppercase tracking-wide">Marker Legend</p>
-                    <div className="flex gap-3 text-xs text-gray-600 flex-wrap">
-                      <span className="flex items-center gap-1.5">
-                        <Flame size={14} className="text-red-600 shrink-0" />
-                        Critical / active fire (selected grows & yellow ring)
+                    <p className="text-xs text-gray-400 mb-2 font-medium uppercase tracking-wide">Flame markers</p>
+                    <div className="flex flex-col gap-1 text-[11px] text-gray-600 leading-snug">
+                      <span className="flex items-center gap-2">
+                        <Flame size={13} className="text-red-800 shrink-0" />
+                        Largest / darkest red — critical spread or very low containment
                       </span>
-                      <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-orange-400 inline-block" />Lower containment</span>
-                      <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-green-400 inline-block" />Higher containment</span>
+                      <span className="flex items-center gap-2">
+                        <Flame size={13} className="text-red-600 shrink-0" />
+                        High priority — low containment or very large acreage
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <Flame size={13} className="text-orange-600 shrink-0" />
+                        Moderate — still burning, climbing containment
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <Flame size={13} className="text-green-700 shrink-0" />
+                        Lower priority — higher containment (active)
+                      </span>
+                      <span className="text-gray-500 pl-5">Selected fire grows + yellow halo; inactive fires are slate.</span>
                     </div>
                   </div>
                 </>
