@@ -298,9 +298,9 @@ export default function MyApplicationPage() {
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-4 flex flex-col h-full">
-              <span className="text-orange-500 font-black text-sm tabular-nums">Starting at $10,000 / year</span>
-              <p className="text-gray-900 text-sm font-semibold mt-2">Essential Protection Plan</p>
-              <p className="text-gray-500 text-xs mt-1.5 flex-1">Designed for eligible homes with core wildfire defense, monitoring, and response readiness.</p>
+              <span className="text-orange-500 font-black text-sm tabular-nums">24/7 Wildfire Monitoring</span>
+              <p className="text-gray-900 text-sm font-semibold mt-2">Real-Time Property Protection</p>
+              <p className="text-gray-500 text-xs mt-1.5 flex-1">Track nearby incidents, receive rapid alerts, and keep your team ready for fast wildfire response.</p>
             </div>
             <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-4 flex flex-col h-full">
               <span className="text-orange-500 font-black text-sm">Priority</span>
