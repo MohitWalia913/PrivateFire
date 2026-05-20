@@ -498,7 +498,7 @@ export default function DashboardPage() {
                     </div>
                   ))}
                   <Link href="/dashboard/profile" className="w-full flex items-center justify-center gap-2 border border-dashed border-gray-300 hover:border-orange-400 rounded-xl py-2.5 text-gray-500 hover:text-orange-500 text-xs font-medium transition-all">
-                    + Add Another Address
+                    Update Address
                   </Link>
                 </>
               )}
