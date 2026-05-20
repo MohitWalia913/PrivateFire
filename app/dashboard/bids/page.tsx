@@ -485,7 +485,7 @@ export default function MyApplicationPage() {
                 <label className="text-gray-500 text-xs mb-1.5 block">Do you have homeowners insurance?</label>
                 {isEditing ? (
                   <div className="flex gap-3">
-                    {['Yes', 'No', 'Not sure'].map(opt => (
+                    {['Yes', 'No'].map(opt => (
                       <button key={opt} type="button" onClick={() => setForm(f => ({ ...f, hasInsurance: opt }))}
                         className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${form.hasInsurance === opt ? 'bg-orange-500 border-orange-500 text-white' : 'bg-gray-50 border-gray-200 text-gray-600 hover:border-gray-300'}`}>
                         {opt}
