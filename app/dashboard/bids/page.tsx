@@ -298,9 +298,9 @@ export default function MyApplicationPage() {
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-4 flex flex-col h-full">
-              <span className="text-orange-500 font-black text-sm tabular-nums">$10,000+</span>
-              <p className="text-gray-900 text-sm font-semibold mt-2">Base coverage</p>
-              <p className="text-gray-500 text-xs mt-1.5 flex-1">Entry tier for qualified properties. Final investment depends on risk level and location.</p>
+              <span className="text-orange-500 font-black text-sm tabular-nums">Starting at $10,000 / year</span>
+              <p className="text-gray-900 text-sm font-semibold mt-2">Essential Protection Plan</p>
+              <p className="text-gray-500 text-xs mt-1.5 flex-1">Designed for eligible homes with core wildfire defense, monitoring, and response readiness.</p>
             </div>
             <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-4 flex flex-col h-full">
               <span className="text-orange-500 font-black text-sm">Priority</span>
@@ -346,7 +346,7 @@ export default function MyApplicationPage() {
         )}
         {error && <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-sm text-red-700">{error}</div>}
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} className="space-y-6">
 
           {/* Personal Information */}
           <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
@@ -516,7 +516,7 @@ export default function MyApplicationPage() {
           )}
 
           {/* Action buttons */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 pt-2">
             {isEditing ? (
               <>
                 <button type="submit"

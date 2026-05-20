@@ -86,8 +86,10 @@ export default function Navbar() {
   if (pathname === '/map') {
     return (
       <nav className="fixed top-0 w-full z-50 border-b border-gray-200 bg-white shadow-sm">
-        <div className="h-7 bg-orange-500 text-white text-[11px] font-semibold flex items-center justify-center px-3 text-center">
-          We deploy dedicated fire crews during wildfires
+        <div className="announcment-bar-bg bg-orange-500 px-2 py-4">
+          <p className="announcment-bar-text text-center font-['Montserrat',sans-serif] text-[0.8rem] font-medium leading-none text-white">
+            We deploy dedicated fire crews during wildfires
+          </p>
         </div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
