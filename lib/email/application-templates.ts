@@ -1,5 +1,7 @@
 import 'server-only'
 
+import { adminApplicationsUrl } from '@/lib/admin/config'
+
 type ApplicationDetails = {
   fullName: string
   email: string
@@ -95,8 +97,8 @@ export function buildAdminApplicationEmail(action: 'submitted' | 'updated', deta
       action === 'submitted'
         ? 'A new Private Fire application was submitted and is now pending review.'
         : 'An existing Private Fire application was updated by the applicant.',
-    ctaLabel: 'Open Dashboard',
-    ctaUrl: `${appUrl()}/dashboard/bids`,
+    ctaLabel: 'Open Admin Console',
+    ctaUrl: adminApplicationsUrl(),
     bodyHtml: `
       <p style="margin:0 0 10px;font-size:13px;line-height:1.6;color:#374151;"><strong>Name:</strong> ${details.fullName}</p>
       <p style="margin:0 0 10px;font-size:13px;line-height:1.6;color:#374151;"><strong>Email:</strong> ${details.email}</p>

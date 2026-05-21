@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { buildAdminApplicationEmail, buildApplicantSubmittedOrUpdatedEmail } from '@/lib/email/application-templates'
+import { getAdminNotificationEmail } from '@/lib/admin/config'
 import { sendEmailWithResend } from '@/lib/email/resend'
-
-const ADMIN_EMAIL = 'laythenmartines0@gmail.com'
 
 export async function POST(req: NextRequest) {
   try {
@@ -43,7 +42,7 @@ export async function POST(req: NextRequest) {
         : 'We received your Private Fire application'
 
     await sendEmailWithResend({
-      to: ADMIN_EMAIL,
+      to: getAdminNotificationEmail(),
       subject: adminSubject,
       replyTo: email,
       html: buildAdminApplicationEmail(normalizedAction, {

@@ -55,7 +55,8 @@ export default function Navbar() {
     pathname.startsWith('/verify-email') ||
     pathname.startsWith('/forgot-password') ||
     pathname.startsWith('/reset-password') ||
-    pathname.startsWith('/embed')
+    pathname.startsWith('/embed') ||
+    pathname.startsWith('/administrator')
   ) {
     return null
   }
