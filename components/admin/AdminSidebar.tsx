@@ -7,9 +7,9 @@ import {
   Users,
   FileText,
   Flame,
-  LogOut,
   Map,
 } from 'lucide-react'
+import AdminSignOutButton from '@/components/admin/AdminSignOutButton'
 
 const nav = [
   { href: '/administrator/overview', label: 'Overview', icon: LayoutDashboard },
@@ -21,7 +21,7 @@ export default function AdminSidebar({ adminEmail }: { adminEmail: string }) {
   const pathname = usePathname()
 
   return (
-    <aside className="flex h-full w-64 flex-col border-r border-gray-200 bg-white">
+    <aside className="flex h-screen min-h-screen w-64 shrink-0 flex-col border-r border-gray-200 bg-white">
       <div className="flex h-16 items-center gap-2 border-b border-gray-200 px-4">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-500">
           <Flame className="h-5 w-5 text-white" />
@@ -63,13 +63,7 @@ export default function AdminSidebar({ adminEmail }: { adminEmail: string }) {
           <Map className="h-4 w-4" />
           Public map
         </Link>
-        <Link
-          href="/login"
-          className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
-        >
-          <LogOut className="h-4 w-4" />
-          Sign out
-        </Link>
+        <AdminSignOutButton />
       </div>
     </aside>
   )

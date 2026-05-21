@@ -1,15 +1,7 @@
-import { redirect } from 'next/navigation'
-import { getAdminSession } from '@/lib/admin/auth'
-
-export default async function AdministratorLayout({
+export default function AdministratorRootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const admin = await getAdminSession()
-  if (!admin) {
-    redirect('/login?error=Admin+access+required')
-  }
-
   return <>{children}</>
 }

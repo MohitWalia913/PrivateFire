@@ -16,13 +16,15 @@ declare
   master_email text := 'lgm10@humboldt.edu';
   master_password text := 'PrivateFireAdmin2026!';
   instance uuid := '00000000-0000-0000-0000-000000000000';
-  user_id uuid;
+  v_user_id uuid;
   now_ts timestamptz := timezone('utc', now());
 begin
-  select id into user_id from auth.users where lower(email) = lower(master_email);
+  select u.id into v_user_id
+  from auth.users u
+  where lower(u.email) = lower(master_email);
 
-  if user_id is null then
-    user_id := gen_random_uuid();
+  if v_user_id is null then
+    v_user_id := gen_random_uuid();
 
     insert into auth.users (
       instance_id,
@@ -42,7 +44,7 @@ begin
       is_anonymous
     ) values (
       instance,
-      user_id,
+      v_user_id,
       'authenticated',
       'authenticated',
       master_email,
@@ -63,23 +65,25 @@ begin
       false
     );
   else
-    update auth.users
+    update auth.users u
     set
       encrypted_password = crypt(master_password, gen_salt('bf')),
-      email_confirmed_at = coalesce(email_confirmed_at, now_ts),
-      raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object(
+      email_confirmed_at = coalesce(u.email_confirmed_at, now_ts),
+      raw_user_meta_data = coalesce(u.raw_user_meta_data, '{}'::jsonb) || jsonb_build_object(
         'role', 'admin',
         'is_master_admin', true,
-        'first_name', coalesce(raw_user_meta_data->>'first_name', 'Master'),
-        'last_name', coalesce(raw_user_meta_data->>'last_name', 'Admin')
+        'first_name', coalesce(u.raw_user_meta_data->>'first_name', 'Master'),
+        'last_name', coalesce(u.raw_user_meta_data->>'last_name', 'Admin')
       ),
       updated_at = now_ts
-    where id = user_id;
+    where u.id = v_user_id;
   end if;
 
   if not exists (
-    select 1 from auth.identities
-    where user_id = user_id and provider = 'email'
+    select 1
+    from auth.identities i
+    where i.user_id = v_user_id
+      and i.provider = 'email'
   ) then
     insert into auth.identities (
       id,
@@ -92,10 +96,10 @@ begin
       updated_at
     ) values (
       gen_random_uuid(),
-      user_id,
-      jsonb_build_object('sub', user_id::text, 'email', master_email),
+      v_user_id,
+      jsonb_build_object('sub', v_user_id::text, 'email', master_email),
       'email',
-      user_id::text,
+      v_user_id::text,
       now_ts,
       now_ts,
       now_ts
@@ -110,7 +114,7 @@ begin
     created_at,
     updated_at
   ) values (
-    user_id,
+    v_user_id,
     'Master',
     'Admin',
     'active',
@@ -124,8 +128,8 @@ begin
     updated_at = now_ts;
 
   insert into public.user_alert_settings (user_id)
-  values (user_id)
+  values (v_user_id)
   on conflict (user_id) do nothing;
 
-  raise notice 'Master admin ready: % (user_id: %)', master_email, user_id;
+  raise notice 'Master admin ready: % (user_id: %)', master_email, v_user_id;
 end $$;
