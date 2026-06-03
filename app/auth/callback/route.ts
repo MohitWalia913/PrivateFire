@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { authCookieOptions } from '@/lib/supabase/auth-cookies'
+import { isIgnorableAuthRedirectError } from '@/lib/supabase/auth-errors'
 import { oauthSafeNext } from '@/lib/supabase/oauth-redirect'
 
 /** PKCE callback: exchange happens here so verifier is read from request cookies (recommended for Next.js). */
@@ -25,9 +26,11 @@ export async function GET(request: NextRequest) {
   }
 
   if (errRaw) {
-    const q = new URLSearchParams({
-      error: errRaw.replace(/\+/g, ' ').slice(0, 400),
-    })
+    const decoded = errRaw.replace(/\+/g, ' ').slice(0, 400)
+    if (isIgnorableAuthRedirectError(decoded)) {
+      return NextResponse.redirect(`${origin}/login`)
+    }
+    const q = new URLSearchParams({ error: decoded })
     return NextResponse.redirect(`${origin}/login?${q}`)
   }
 
@@ -63,7 +66,11 @@ export async function GET(request: NextRequest) {
   const { error } = await supabase.auth.exchangeCodeForSession(code)
 
   if (error) {
-    const q = new URLSearchParams({ error: error.message.slice(0, 400) })
+    const message = error.message.slice(0, 400)
+    if (isIgnorableAuthRedirectError(message)) {
+      return NextResponse.redirect(`${origin}/login`)
+    }
+    const q = new URLSearchParams({ error: message })
     return NextResponse.redirect(`${origin}/login?${q}`)
   }
 

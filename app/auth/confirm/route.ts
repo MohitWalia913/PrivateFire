@@ -11,12 +11,17 @@ export async function GET(request: NextRequest) {
   const next = searchParams.get('next') ?? '/dashboard'
 
   /**
-   * Some Supabase email templates/providers return PKCE `code` links.
-   * Delegate those to callback exchange flow instead of showing false invalid-link errors.
+   * Legacy PKCE `code` links (e.g. {{ .ConfirmationURL }}) need the verifier cookie from
+   * the same browser that started signup. Exchange here when possible; otherwise send to login
+   * without a scary error — OAuth still uses /auth/callback directly.
    */
   if (code) {
-    const qs = searchParams.toString()
-    redirect(`/auth/callback${qs ? `?${qs}` : ''}`)
+    const supabase = await createSupabaseServerAuthClient()
+    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+    if (!exchangeError) {
+      redirect(next)
+    }
+    redirect('/login')
   }
 
   if (!tokenHash || !type) {

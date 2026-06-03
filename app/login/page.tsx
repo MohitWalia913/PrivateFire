@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Bell, Eye, EyeOff, Flame, Lock, Mail, Map, Phone, Shield } from 'lucide-react'
+import { isIgnorableAuthRedirectError } from '@/lib/supabase/auth-errors'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { signInWithGoogle } from '@/lib/supabase/oauth'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
@@ -18,9 +19,18 @@ export default function LoginPage() {
   const [sessionPending, setSessionPending] = useState(true)
 
   useEffect(() => {
-    const errorParam = new URLSearchParams(window.location.search).get('error')
-    if (errorParam) {
+    const params = new URLSearchParams(window.location.search)
+    const errorParam =
+      params.get('error_description') || params.get('error')
+    if (errorParam && !isIgnorableAuthRedirectError(errorParam)) {
       queueMicrotask(() => setError(errorParam))
+    }
+    if (errorParam) {
+      params.delete('error')
+      params.delete('error_description')
+      const qs = params.toString()
+      const path = `${window.location.pathname}${qs ? `?${qs}` : ''}`
+      window.history.replaceState({}, '', path)
     }
   }, [])
 
